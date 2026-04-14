@@ -149,13 +149,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
 
 
-def main():
+async def main():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     app = ApplicationBuilder().token(token).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Bot running...")
-    app.run_polling()
+    async with app:
+        await app.start()
+        await app.updater.start_polling()
+        await asyncio.Event().wait()  # run forever
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
