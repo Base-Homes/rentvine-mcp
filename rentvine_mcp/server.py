@@ -1,19 +1,13 @@
 """Rentvine MCP server — exposes Rentvine data as MCP tools for Claude and other AI clients."""
-import re
+import base64
+import os
 
+import httpx
 from mcp.server.fastmcp import FastMCP
 
-from rentvine_mcp import client
+from rentvine_mcp import client, tools
 
 mcp = FastMCP("rentvine")
-
-_LEASE_STATUS = {"1": "future", "2": "active", "3": "expired", "4": "cancelled"}
-_WO_STATUS = {"1": "open", "2": "in_progress", "3": "completed", "4": "cancelled"}
-_WO_PRIORITY = {"1": "low", "2": "medium", "3": "high", "4": "emergency"}
-
-
-def _strip_html(text: str | None) -> str:
-    return re.sub(r"<[^>]+>", "", text or "").strip()
 
 
 @mcp.tool()
@@ -21,11 +15,6 @@ async def debug_raw(endpoint: str) -> dict:
     """Return the raw API response from a Rentvine endpoint for debugging field names.
     endpoint examples: 'properties', 'leases', 'maintenance/work-orders', 'tenants', 'applications'
     """
-    import base64
-    import os
-
-    import httpx
-
     api_key = os.environ.get("RENTVINE_API_KEY", "")
     api_secret = os.environ.get("RENTVINE_API_SECRET", "")
     company = os.environ.get("RENTVINE_COMPANY", "")
@@ -40,11 +29,7 @@ async def debug_raw(endpoint: str) -> dict:
         return {"first_record": data[0] if data else {}, "total": len(data)}
     if isinstance(data, dict):
         items = data.get("data") or data.get("results") or []
-        return {
-            "first_record": items[0] if items else {},
-            "total": len(items),
-            "envelope_keys": list(data.keys()),
-        }
+        return {"first_record": items[0] if items else {}, "total": len(items), "envelope_keys": list(data.keys())}
     return {"raw": data}
 
 
@@ -53,20 +38,7 @@ async def list_properties() -> list[dict]:
     """List all properties from Rentvine (live data).
     Returns property name, address, type, and active status.
     """
-    properties = await client.fetch_properties()
-    return [
-        {
-            "property_id": p.get("propertyID"),
-            "name": p.get("name"),
-            "address": p.get("address"),
-            "city": p.get("city"),
-            "postal_code": p.get("postalCode"),
-            "type": "multi_family" if str(p.get("isMultiUnit", "0")) == "1" else "single_family",
-            "is_active": str(p.get("isActive", "0")) == "1",
-            "portfolio_id": p.get("portfolioID"),
-        }
-        for p in properties
-    ]
+    return await tools.list_properties()
 
 
 @mcp.tool()
@@ -75,34 +47,7 @@ async def list_leases() -> list[dict]:
     Returns tenant name, unit address, rent, deposit, bed/bath count, dates, and status.
     Use this to answer questions about lease expirations, rent amounts, or active tenants.
     """
-    leases = await client.fetch_leases()
-    result = []
-    for row in leases:
-        lse = row.get("lease") or row
-        unit = lse.get("unit") or row.get("unit") or {}
-        tenants = lse.get("tenants") or []
-        tenant_name = ", ".join(tenants) if isinstance(tenants, list) else str(tenants)
-        status = _LEASE_STATUS.get(str(lse.get("primaryLeaseStatusID") or ""), "unknown")
-        result.append(
-            {
-                "lease_id": lse.get("leaseID"),
-                "tenant_name": tenant_name,
-                "unit_address": unit.get("address"),
-                "rent_amount": unit.get("rent"),
-                "deposit": unit.get("deposit"),
-                "beds": unit.get("beds"),
-                "baths": unit.get("baths"),
-                "sqft": unit.get("sqFt"),
-                "start_date": lse.get("startDate"),
-                "end_date": lse.get("endDate"),
-                "move_in_date": lse.get("moveInDate"),
-                "status": status,
-                "notice_date": lse.get("noticeDate"),
-                "expected_move_out": lse.get("expectedMoveOutDate"),
-                "is_marked_to_vacate": lse.get("isMarkedToVacate"),
-            }
-        )
-    return result
+    return await tools.list_leases()
 
 
 @mcp.tool()
@@ -111,36 +56,7 @@ async def list_units(property_name: str) -> list[dict]:
     property_name: the property name or address fragment as it appears in your Rentvine portfolio.
     Returns unit address, vacancy status, rent amount, and deposit.
     """
-    properties = await client.fetch_properties()
-    prop = next(
-        (
-            p
-            for p in properties
-            if property_name.lower() in (p.get("name") or p.get("address") or "").lower()
-        ),
-        None,
-    )
-    if not prop:
-        names = [p.get("name") or p.get("address") for p in properties]
-        return [{"error": f"Property '{property_name}' not found. Available: {names}"}]
-
-    rv_prop_id = prop.get("propertyID")
-    if not rv_prop_id:
-        return [{"error": f"Property '{property_name}' has no Rentvine ID."}]
-
-    units = await client.fetch_units(str(rv_prop_id))
-    return [
-        {
-            "unit_number": u.get("number") or u.get("unitNumber"),
-            "address": u.get("address"),
-            "status": u.get("status") or ("vacant" if u.get("isVacant") else "occupied"),
-            "rent": u.get("rent") or u.get("marketRent"),
-            "deposit": u.get("deposit"),
-            "beds": u.get("beds"),
-            "baths": u.get("baths"),
-        }
-        for u in units
-    ]
+    return await tools.list_units(property_name)
 
 
 @mcp.tool()
@@ -148,32 +64,7 @@ async def list_work_orders() -> list[dict]:
     """List all maintenance work orders from Rentvine (live data).
     Returns description, property, status, priority, estimated cost, and scheduling details.
     """
-    work_orders = await client.fetch_work_orders()
-    result = []
-    for row in work_orders:
-        wo = row.get("workOrder") or row
-        vendor_contact = row.get("contact") or wo.get("contact") or {}
-        vendor_name = vendor_contact.get("name") if isinstance(vendor_contact, dict) else None
-        result.append(
-            {
-                "work_order_id": wo.get("workOrderID"),
-                "work_order_number": wo.get("workOrderNumber"),
-                "description": _strip_html(wo.get("description")),
-                "property_id": wo.get("propertyID"),
-                "unit_id": wo.get("unitID"),
-                "status": _WO_STATUS.get(str(wo.get("primaryWorkOrderStatusID") or ""), "unknown"),
-                "priority": _WO_PRIORITY.get(str(wo.get("priorityID") or ""), "unknown"),
-                "estimated_amount": wo.get("estimatedAmount"),
-                "scheduled_start": wo.get("scheduledStartDate"),
-                "scheduled_end": wo.get("scheduledEndDate"),
-                "actual_start": wo.get("actualStartDate"),
-                "actual_end": wo.get("actualEndDate"),
-                "vendor": vendor_name,
-                "is_owner_approved": wo.get("isOwnerApproved"),
-                "date_closed": wo.get("dateClosed"),
-            }
-        )
-    return result
+    return await tools.list_work_orders()
 
 
 @mcp.tool()
@@ -181,17 +72,7 @@ async def list_applications() -> list[dict]:
     """List rental applications from Rentvine (live data).
     Returns applicant name, property, unit, status, and application date.
     """
-    apps = await client.fetch_applications()
-    return [
-        {
-            "applicant_name": a.get("applicantName") or a.get("name"),
-            "property_name": a.get("propertyName") or a.get("property", {}).get("name"),
-            "unit_number": a.get("unitNumber") or a.get("unit", {}).get("number"),
-            "status": a.get("status"),
-            "applied_at": a.get("applicationDate") or a.get("createdAt"),
-        }
-        for a in apps
-    ]
+    return await tools.list_applications()
 
 
 @mcp.tool()
@@ -199,18 +80,7 @@ async def list_inspections() -> list[dict]:
     """List maintenance inspections from Rentvine (live data).
     Returns title, property, unit, scheduled date, status, and inspector.
     """
-    inspections = await client.fetch_inspections()
-    return [
-        {
-            "title": i.get("title") or i.get("type"),
-            "property_name": i.get("propertyName") or i.get("property", {}).get("name"),
-            "unit_number": i.get("unitNumber") or i.get("unit", {}).get("number"),
-            "scheduled_date": i.get("scheduledDate") or i.get("date"),
-            "status": i.get("status"),
-            "inspector": i.get("inspectorName") or i.get("inspector", {}).get("name"),
-        }
-        for i in inspections
-    ]
+    return await tools.list_inspections()
 
 
 @mcp.tool()
@@ -219,25 +89,7 @@ async def get_tenant_balance(tenant_name: str) -> dict:
     tenant_name: the tenant's full name as it appears in your Rentvine roster.
     Returns balance and ledger data.
     """
-    tenants = await client.fetch_tenants()
-    tenant = next(
-        (
-            t
-            for t in tenants
-            if tenant_name.lower()
-            in (t.get("name") or t.get("tenantName") or "").lower()
-        ),
-        None,
-    )
-    if not tenant:
-        return {"error": f"Tenant '{tenant_name}' not found in Rentvine."}
-
-    rv_tenant_id = tenant.get("tenantID") or tenant.get("id")
-    if not rv_tenant_id:
-        return {"error": f"Tenant '{tenant_name}' has no Rentvine ID."}
-
-    data = await client.fetch_tenant_balance(str(rv_tenant_id))
-    return {"tenant_name": tenant_name, "ledger": data}
+    return await tools.get_tenant_balance(tenant_name)
 
 
 def main():

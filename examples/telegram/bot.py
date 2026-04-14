@@ -1,4 +1,4 @@
-"""Rentvine Telegram bot — uses rentvine-mcp client + Claude to answer PM questions."""
+"""Rentvine Telegram bot — uses rentvine-mcp tools + Claude to answer PM questions."""
 import asyncio
 import os
 
@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
-from rentvine_mcp import client as rv
+from rentvine_mcp import tools as rv
 
 load_dotenv()
 
@@ -77,33 +77,19 @@ TOOLS = [
 
 async def run_tool(name: str, inputs: dict):
     if name == "list_properties":
-        return await rv.fetch_properties()
+        return await rv.list_properties()
     if name == "list_leases":
-        return await rv.fetch_leases()
+        return await rv.list_leases()
     if name == "list_units":
-        props = await rv.fetch_properties()
-        prop = next(
-            (p for p in props if inputs["property_name"].lower() in (p.get("name") or p.get("address") or "").lower()),
-            None,
-        )
-        if not prop:
-            return {"error": f"Property '{inputs['property_name']}' not found."}
-        return await rv.fetch_units(str(prop.get("propertyID")))
+        return await rv.list_units(inputs["property_name"])
     if name == "list_work_orders":
-        return await rv.fetch_work_orders()
+        return await rv.list_work_orders()
     if name == "list_applications":
-        return await rv.fetch_applications()
+        return await rv.list_applications()
     if name == "list_inspections":
-        return await rv.fetch_inspections()
+        return await rv.list_inspections()
     if name == "get_tenant_balance":
-        tenants = await rv.fetch_tenants()
-        tenant = next(
-            (t for t in tenants if inputs["tenant_name"].lower() in (t.get("name") or "").lower()),
-            None,
-        )
-        if not tenant:
-            return {"error": f"Tenant '{inputs['tenant_name']}' not found."}
-        return await rv.fetch_tenant_balance(str(tenant.get("tenantID")))
+        return await rv.get_tenant_balance(inputs["tenant_name"])
     return {"error": f"Unknown tool: {name}"}
 
 
@@ -157,7 +143,7 @@ async def main():
     async with app:
         await app.start()
         await app.updater.start_polling()
-        await asyncio.Event().wait()  # run forever
+        await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
