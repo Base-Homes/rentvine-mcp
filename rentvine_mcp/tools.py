@@ -25,7 +25,8 @@ async def list_properties() -> list[dict]:
             "is_active": str(p.get("isActive", "0")) == "1",
             "portfolio_id": p.get("portfolioID"),
         }
-        for p in properties
+        for row in properties
+        for p in [row.get("property") or row]
     ]
 
 
@@ -46,8 +47,8 @@ async def list_leases() -> list[dict]:
                 "rent_amount": unit.get("rent"),
                 "deposit": unit.get("deposit"),
                 "beds": unit.get("beds"),
-                "baths": unit.get("baths"),
-                "sqft": unit.get("sqFt"),
+                "baths": unit.get("fullBaths"),
+                "sqft": unit.get("size"),
                 "start_date": lse.get("startDate"),
                 "end_date": lse.get("endDate"),
                 "move_in_date": lse.get("moveInDate"),
@@ -81,15 +82,16 @@ async def list_units(property_name: str) -> list[dict]:
     units = await client.fetch_units(str(rv_prop_id))
     return [
         {
-            "unit_number": u.get("number") or u.get("unitNumber"),
+            "unit_number": u.get("number") or u.get("unitNumber") or u.get("name"),
             "address": u.get("address"),
             "status": u.get("status") or ("vacant" if u.get("isVacant") else "occupied"),
             "rent": u.get("rent") or u.get("marketRent"),
             "deposit": u.get("deposit"),
             "beds": u.get("beds"),
-            "baths": u.get("baths"),
+            "baths": u.get("fullBaths"),
         }
-        for u in units
+        for row in units
+        for u in [row.get("unit") or row]
     ]
 
 
@@ -153,18 +155,20 @@ async def list_inspections() -> list[dict]:
 
 async def get_tenant_balance(tenant_name: str) -> dict:
     tenants = await client.fetch_tenants()
-    tenant = next(
+    match = next(
         (
-            t
-            for t in tenants
-            if tenant_name.lower() in (t.get("name") or t.get("tenantName") or "").lower()
+            row
+            for row in tenants
+            for t in [row.get("contact") or row]
+            if tenant_name.lower() in (t.get("name") or "").lower()
         ),
         None,
     )
-    if not tenant:
+    if not match:
         return {"error": f"Tenant '{tenant_name}' not found in Rentvine."}
 
-    rv_tenant_id = tenant.get("tenantID") or tenant.get("id")
+    contact = match.get("contact") or match
+    rv_tenant_id = contact.get("contactID") or contact.get("tenantID") or contact.get("id")
     if not rv_tenant_id:
         return {"error": f"Tenant '{tenant_name}' has no Rentvine ID."}
 

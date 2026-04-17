@@ -14,6 +14,12 @@ load_dotenv()
 
 anthropic = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
+ALLOWED_USER_IDS = {
+    int(x) for x in os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "").split(",") if x.strip()
+}
+
+MAX_TOOL_ROUNDS = 10
+
 SYSTEM_PROMPT = """You are a property management assistant with live access to Rentvine data.
 Answer questions about properties, leases, tenants, work orders, applications, and inspections.
 Be concise — this is a Telegram chat. Use plain text, no markdown."""
@@ -95,6 +101,7 @@ async def run_tool(name: str, inputs: dict):
 
 async def ask_claude(user_message: str) -> str:
     messages = [{"role": "user", "content": user_message}]
+    tool_rounds = 0
 
     while True:
         response = anthropic.messages.create(
@@ -112,6 +119,9 @@ async def ask_claude(user_message: str) -> str:
             )
 
         if response.stop_reason == "tool_use":
+            tool_rounds += 1
+            if tool_rounds > MAX_TOOL_ROUNDS:
+                return "Request required too many steps. Please try a simpler question."
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []
             for block in response.content:
@@ -130,6 +140,9 @@ async def ask_claude(user_message: str) -> str:
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ALLOWED_USER_IDS and update.effective_user.id not in ALLOWED_USER_IDS:
+        await update.message.reply_text("Unauthorized.")
+        return
     await update.effective_chat.send_action(ChatAction.TYPING)
     reply = await ask_claude(update.message.text)
     await update.message.reply_text(reply)
