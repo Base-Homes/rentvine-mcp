@@ -1,36 +1,9 @@
 """Rentvine MCP server — exposes Rentvine data as MCP tools for Claude and other AI clients."""
-import base64
-import os
-
-import httpx
 from mcp.server.fastmcp import FastMCP
 
 from rentvine_mcp import client, tools
 
 mcp = FastMCP("rentvine")
-
-
-@mcp.tool()
-async def debug_raw(endpoint: str) -> dict:
-    """Return the raw API response from a Rentvine endpoint for debugging field names.
-    endpoint examples: 'properties', 'leases', 'maintenance/work-orders', 'tenants', 'applications'
-    """
-    api_key = os.environ.get("RENTVINE_API_KEY", "")
-    api_secret = os.environ.get("RENTVINE_API_SECRET", "")
-    company = os.environ.get("RENTVINE_COMPANY", "")
-    base_url = f"https://{company}.rentvine.com/api/manager"
-    token = base64.b64encode(f"{api_key}:{api_secret}".encode()).decode()
-    headers = {"Authorization": f"Basic {token}", "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=30, headers=headers) as c:
-        resp = await c.get(f"{base_url}/{endpoint}")
-        resp.raise_for_status()
-        data = resp.json()
-    if isinstance(data, list):
-        return {"first_record": data[0] if data else {}, "total": len(data)}
-    if isinstance(data, dict):
-        items = data.get("data") or data.get("results") or []
-        return {"first_record": items[0] if items else {}, "total": len(items), "envelope_keys": list(data.keys())}
-    return {"raw": data}
 
 
 @mcp.tool()
