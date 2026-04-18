@@ -1,14 +1,15 @@
-"""Rentvine Telegram bot — uses rentvine-mcp tools + Claude to answer PM questions."""
+"""Rentvine Telegram bot — consumes the rentvine-mcp server as a stdio MCP client."""
 import asyncio
+import contextlib
 import os
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-
-from rentvine_mcp import tools as rv
 
 load_dotenv()
 
@@ -24,79 +25,16 @@ SYSTEM_PROMPT = """You are a property management assistant with live access to R
 Answer questions about properties, leases, tenants, work orders, applications, and inspections.
 Be concise — this is a Telegram chat. Use plain text, no markdown."""
 
-TOOLS = [
-    {
-        "name": "list_properties",
-        "description": "List all properties with address, type, and active status.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "list_leases",
-        "description": "List all leases with tenant name, unit address, rent, deposit, bed/bath count, dates, and status.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "list_units",
-        "description": "List units for a specific property with vacancy status and rent.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "property_name": {
-                    "type": "string",
-                    "description": "Property name or address fragment.",
-                }
-            },
-            "required": ["property_name"],
-        },
-    },
-    {
-        "name": "list_work_orders",
-        "description": "List all maintenance work orders with description, status, priority, and vendor.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "list_applications",
-        "description": "List rental applications with applicant name, property, and status.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "list_inspections",
-        "description": "List maintenance inspections with scheduled date and inspector.",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "get_tenant_balance",
-        "description": "Get ledger balance for a tenant by name.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "tenant_name": {
-                    "type": "string",
-                    "description": "Tenant full name.",
-                }
-            },
-            "required": ["tenant_name"],
-        },
-    },
-]
+# Populated at startup in main() after the MCP session initializes.
+mcp_session: ClientSession | None = None
+anthropic_tools: list[dict] = []
 
 
-async def run_tool(name: str, inputs: dict):
-    if name == "list_properties":
-        return await rv.list_properties()
-    if name == "list_leases":
-        return await rv.list_leases()
-    if name == "list_units":
-        return await rv.list_units(inputs["property_name"])
-    if name == "list_work_orders":
-        return await rv.list_work_orders()
-    if name == "list_applications":
-        return await rv.list_applications()
-    if name == "list_inspections":
-        return await rv.list_inspections()
-    if name == "get_tenant_balance":
-        return await rv.get_tenant_balance(inputs["tenant_name"])
-    return {"error": f"Unknown tool: {name}"}
+async def run_tool(name: str, inputs: dict) -> str:
+    assert mcp_session is not None, "MCP session not initialized"
+    result = await mcp_session.call_tool(name, inputs)
+    texts = [block.text for block in result.content if hasattr(block, "text")]
+    return "\n".join(texts) if texts else str(result)
 
 
 async def ask_claude(user_message: str) -> str:
@@ -108,7 +46,7 @@ async def ask_claude(user_message: str) -> str:
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             system=SYSTEM_PROMPT,
-            tools=TOOLS,
+            tools=anthropic_tools,
             messages=messages,
         )
 
@@ -130,7 +68,7 @@ async def ask_claude(user_message: str) -> str:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": str(result),
+                        "content": result,
                     })
             messages.append({"role": "user", "content": tool_results})
         else:
@@ -149,14 +87,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def main():
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    app = ApplicationBuilder().token(token).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot running...")
-    async with app:
-        await app.start()
-        await app.updater.start_polling()
-        await asyncio.Event().wait()
+    global mcp_session, anthropic_tools
+
+    server_params = StdioServerParameters(
+        command="npx",
+        args=["-y", "rentvine-mcp"],
+    )
+
+    async with contextlib.AsyncExitStack() as stack:
+        read, write = await stack.enter_async_context(stdio_client(server_params))
+        session = await stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+        mcp_session = session
+
+        tool_list = await session.list_tools()
+        anthropic_tools = [
+            {
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.inputSchema,
+            }
+            for t in tool_list.tools
+        ]
+
+        token = os.environ["TELEGRAM_BOT_TOKEN"]
+        app = ApplicationBuilder().token(token).build()
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        print(f"Bot running with {len(anthropic_tools)} tools from rentvine-mcp...")
+        async with app:
+            await app.start()
+            await app.updater.start_polling()
+            await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
