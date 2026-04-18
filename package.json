@@ -1,0 +1,31 @@
+{
+  "name": "rentvine-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Rentvine property management — works with Claude Desktop, Claude Code, Cursor, and any MCP client",
+  "type": "module",
+  "bin": {
+    "rentvine-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["mcp", "rentvine", "property-management", "claude"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
