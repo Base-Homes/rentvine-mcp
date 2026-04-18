@@ -54,6 +54,3 @@ The `version` script in `package.json` auto-syncs `manifest.json` to match. The 
 
 Requires repo secret `NPM_TOKEN` (npm Automation token — bypasses 2FA by design). npm provenance also requires `repository.url` in `package.json` to match the GitHub repo URL.
 
-## Examples
-
-`examples/telegram/bot.py` — Telegram bot that consumes `rentvine-mcp` as a stdio MCP client (spawns `npx -y rentvine-mcp` as a subprocess on startup, keeps the session open for the app's lifetime, fetches tool definitions via `session.list_tools()` rather than hardcoding them). Demonstrates the real-world MCP client pattern. Requires `ALLOWED_TELEGRAM_USER_IDS` allowlist env var.

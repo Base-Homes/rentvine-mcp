@@ -116,12 +116,6 @@ npx @anthropic-ai/dxt pack . rentvine-mcp.dxt
 npm install           # restore dev deps
 ```
 
-### Telegram Bot (example)
-
-`examples/telegram/` contains a ready-to-run bot that pairs Claude with Rentvine data. See `examples/telegram/README.md`.
-
----
-
 ## Troubleshooting
 
 **Extension won't install / hammer icon missing in Claude Desktop** — check **Settings → Extensions** for error details. Most common cause: Node 18+ not available. Claude Desktop bundles Node, so if this fails, restart the app fully (Cmd+Q).
