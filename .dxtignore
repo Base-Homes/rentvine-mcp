@@ -1,0 +1,17 @@
+src/
+rentvine_mcp/
+examples/
+inspect_fields.py
+pyproject.toml
+tsconfig.json
+*.dxt
+.gstack/
+.claude/
+.github/
+**/test/
+**/tests/
+**/*.test.js
+**/*.spec.js
+**/.github/
+**/*.md
+!README.md
