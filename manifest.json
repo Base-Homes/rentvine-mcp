@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "rentvine-mcp",
   "display_name": "Rentvine",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Live access to your Rentvine property management data inside Claude.",
   "long_description": "Ask Claude about your Rentvine properties, leases, units, work orders, applications, inspections, and tenant balances. Data is read live from the Rentvine API using your own credentials.",
   "author": {
@@ -13,7 +13,9 @@
     "entry_point": "dist/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/index.js"],
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
       "env": {
         "RENTVINE_API_KEY": "${user_config.api_key}",
         "RENTVINE_API_SECRET": "${user_config.api_secret}",
@@ -44,19 +46,48 @@
     }
   },
   "tools": [
-    { "name": "list_properties", "description": "All properties with address, type, and active status" },
-    { "name": "list_leases", "description": "All leases with tenant, rent, dates, and status" },
-    { "name": "list_units", "description": "Units for a named property with vacancy and rent" },
-    { "name": "list_applications", "description": "Rental applications with applicant and status" },
-    { "name": "list_inspections", "description": "Maintenance inspections with date and inspector" },
-    { "name": "list_work_orders", "description": "Work orders with status and priority" },
-    { "name": "get_tenant_balance", "description": "Ledger balance for a named tenant" }
+    {
+      "name": "list_properties",
+      "description": "All properties with address, type, and active status"
+    },
+    {
+      "name": "list_leases",
+      "description": "All leases with tenant, rent, dates, and status"
+    },
+    {
+      "name": "list_units",
+      "description": "Units for a named property with vacancy and rent"
+    },
+    {
+      "name": "list_applications",
+      "description": "Rental applications with applicant and status"
+    },
+    {
+      "name": "list_inspections",
+      "description": "Maintenance inspections with date and inspector"
+    },
+    {
+      "name": "list_work_orders",
+      "description": "Work orders with status and priority"
+    },
+    {
+      "name": "get_tenant_balance",
+      "description": "Ledger balance for a named tenant"
+    }
   ],
-  "keywords": ["rentvine", "property-management", "real-estate"],
+  "keywords": [
+    "rentvine",
+    "property-management",
+    "real-estate"
+  ],
   "license": "MIT",
   "compatibility": {
     "claude_desktop": ">=0.10.0",
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "node": ">=18.0.0"
     }
