@@ -71,6 +71,38 @@ If you're embedding MCP servers in your own app (stdio transport), use the same 
 }
 ```
 
+### ChatGPT (Business / Enterprise / Edu — Developer Mode)
+
+ChatGPT accepts remote MCP servers over HTTPS, so you need to deploy the HTTP variant somewhere the internet can reach. Each deployment is scoped to one Rentvine account (its credentials live in env vars on the server).
+
+**1. Deploy the HTTP server.** Build from the included `Dockerfile` and deploy to any container host (Fly.io, Render, Railway, Google Cloud Run, AWS App Runner, Heroku, etc.). Set these env vars on the deployment:
+
+| Variable | Value |
+|---|---|
+| `RENTVINE_API_KEY` | Your Rentvine API key |
+| `RENTVINE_API_SECRET` | Your Rentvine API secret |
+| `RENTVINE_COMPANY` | Your subdomain |
+| `MCP_AUTH_TOKEN` | A long random string you generate (e.g. `openssl rand -hex 32`) — **required** for public deploys |
+| `PORT` | Whatever port your host expects (most default to 3000 or 8080) |
+
+Local smoke test:
+
+```bash
+npm install && npm run build
+MCP_AUTH_TOKEN=test RENTVINE_API_KEY=... RENTVINE_API_SECRET=... RENTVINE_COMPANY=... \
+  node dist/http.js
+```
+
+**2. Add the server in ChatGPT.** An admin must enable Developer Mode in **Workspace Settings → Permissions & Roles → Developer Mode**, then any member can add the connector:
+
+- ChatGPT → **Settings → Connectors → Advanced → Add custom MCP server**
+- URL: `https://your-deployment.example.com/mcp`
+- Auth: `Bearer` → paste the `MCP_AUTH_TOKEN` value
+
+**3. Use it.** In a new chat, pick **Developer mode** from the Plus menu and select the `rentvine` connector. ChatGPT will show explicit confirmation modals before any tool call runs.
+
+Not available on ChatGPT Plus or Free — custom MCP connectors are gated to Business / Enterprise / Edu workspaces as of April 2026.
+
 ---
 
 ## Environment Variables
