@@ -99,15 +99,8 @@ What is the balance for tenant [name]?
 
 ## Development
 
-This repo contains two implementations of the same server:
-
-- **TypeScript** (`src/`, `package.json`) — the default, published to npm and DXT
-- **Python** (`rentvine_mcp/`, `pyproject.toml`) — the original reference implementation, still works
-
-### TypeScript
-
 ```bash
-git clone https://github.com/hchittanuru3/rentvine-mcp
+git clone https://github.com/Base-Homes/rentvine-mcp
 cd rentvine-mcp
 npm install
 npm run build
@@ -122,19 +115,6 @@ npm prune --omit=dev
 npx @anthropic-ai/dxt pack . rentvine-mcp.dxt
 npm install           # restore dev deps
 ```
-
-### Python (alternative)
-
-```bash
-pip install -e .
-rentvine-mcp          # runs the server on stdio
-```
-
-### Telegram Bot (example)
-
-`examples/telegram/` contains a ready-to-run bot that pairs Claude with Rentvine data. See `examples/telegram/README.md`.
-
----
 
 ## Troubleshooting
 
