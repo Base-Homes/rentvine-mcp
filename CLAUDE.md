@@ -8,11 +8,15 @@ An MCP server that exposes Rentvine property management data (properties, leases
 
 ## Architecture
 
-Three layers, each a single file under `src/`:
+Layers under `src/`:
 
 - `client.ts` — raw HTTP against the Rentvine `/api/manager` endpoints, Basic auth from `RENTVINE_API_KEY` / `RENTVINE_API_SECRET` / `RENTVINE_COMPANY` env vars
 - `tools.ts` — domain-level formatting (envelope unwrapping, status-ID translation, HTML stripping for descriptions). One function per MCP tool.
-- `index.ts` — MCP server entrypoint. Registers tools with the `@modelcontextprotocol/sdk`, runs over stdio.
+- `createServer.ts` — builds the `McpServer` instance and registers all 7 tools. Shared by both entrypoints.
+- `index.ts` — stdio entrypoint. This is what Claude Desktop / Claude Code / Cursor / etc. spawn as a subprocess.
+- `http.ts` — Streamable HTTP entrypoint for ChatGPT Developer Mode and other remote MCP clients. Express server with bearer-token auth, session management via `mcp-session-id` header. Requires `MCP_AUTH_TOKEN` env var when exposed publicly.
+
+Both entrypoints go through `createServer()` — if you add/change a tool, it shows up everywhere.
 
 ## Key pattern: Rentvine envelope unwrapping
 

@@ -1,0 +1,15 @@
+node_modules
+dist
+*.dxt
+.git
+.github
+.gitignore
+.gstack
+.claude
+.env
+.dxtignore
+manifest.json
+rentvine-mcp.dxt
+README.md
+CLAUDE.md
+LICENSE
