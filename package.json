@@ -19,6 +19,14 @@
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Base-Homes/rentvine-mcp.git"
+  },
+  "homepage": "https://github.com/Base-Homes/rentvine-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Base-Homes/rentvine-mcp/issues"
+  },
   "keywords": [
     "mcp",
     "rentvine",
