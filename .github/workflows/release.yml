@@ -1,6 +1,17 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
   push:
     tags:
       - 'v*.*.*'
@@ -13,6 +24,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -22,13 +35,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Bump version (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm version ${{ inputs.bump }}
+          git push --follow-tags
+          echo "TAG=v$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
+      - name: Resolve tag (tag push only)
+        if: github.event_name == 'push'
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_ENV"
+
       - name: Build
         run: npm run build
 
       - name: Verify package.json version matches tag
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          TAG_VERSION="${TAG#v}"
           if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
             echo "::error::package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
             exit 1
@@ -48,6 +74,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF#refs/tags/}" rentvine-mcp.dxt \
-            --title "${GITHUB_REF#refs/tags/}" \
+          gh release create "$TAG" rentvine-mcp.dxt \
+            --title "$TAG" \
             --generate-notes
