@@ -101,6 +101,16 @@ export async function fetchTenantBalance(tenantRentvineId: string): Promise<unkn
   return await get("/accounting/ledgers/search", { tenantId: tenantRentvineId });
 }
 
+export async function createWorkOrder(
+  body: Record<string, unknown>
+): Promise<unknown> {
+  // Create contract mirrors update: POST to the collection path, bare body
+  // (no { workOrder: {...} } envelope). Minimal required fields are
+  // description, propertyID, and priorityID — Rentvine auto-fills unitID
+  // from the property and defaults primaryWorkOrderStatusID to 1 (open).
+  return await request("POST", "/maintenance/work-orders", { body });
+}
+
 export async function updateWorkOrder(
   workOrderId: string,
   updates: Record<string, unknown>
