@@ -19,6 +19,13 @@ const WO_PRIORITY: Record<string, string> = {
   "4": "emergency",
 };
 
+const WO_STATUS_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(WO_STATUS).map(([id, name]) => [name, id])
+);
+const WO_PRIORITY_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(WO_PRIORITY).map(([id, name]) => [name, id])
+);
+
 type Row = Record<string, unknown>;
 
 function stripHtml(text: unknown): string {
@@ -135,6 +142,80 @@ export async function listWorkOrders() {
       date_closed: wo.dateClosed,
     };
   });
+}
+
+export interface WorkOrderUpdateInput {
+  status?: string;
+  priority?: string;
+  description?: string;
+  estimated_amount?: number | string;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  actual_start?: string;
+  actual_end?: string;
+  date_closed?: string;
+  is_owner_approved?: boolean;
+}
+
+export async function updateWorkOrder(
+  workOrderId: string,
+  input: WorkOrderUpdateInput
+) {
+  if (!workOrderId) {
+    return { error: "work_order_id is required." };
+  }
+
+  const payload: Record<string, unknown> = {};
+
+  if (input.status !== undefined) {
+    const id = WO_STATUS_TO_ID[input.status];
+    if (!id) {
+      return {
+        error: `Invalid status '${input.status}'. Expected one of: ${Object.keys(WO_STATUS_TO_ID).join(", ")}.`,
+      };
+    }
+    payload.primaryWorkOrderStatusID = id;
+    // Auto-stamp dateClosed when caller marks completed/cancelled and didn't
+    // supply one explicitly — matches how Rentvine's UI behaves.
+    if (
+      (input.status === "completed" || input.status === "cancelled") &&
+      input.date_closed === undefined
+    ) {
+      payload.dateClosed = new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  if (input.priority !== undefined) {
+    const id = WO_PRIORITY_TO_ID[input.priority];
+    if (!id) {
+      return {
+        error: `Invalid priority '${input.priority}'. Expected one of: ${Object.keys(WO_PRIORITY_TO_ID).join(", ")}.`,
+      };
+    }
+    payload.priorityID = id;
+  }
+
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.estimated_amount !== undefined) payload.estimatedAmount = String(input.estimated_amount);
+  if (input.scheduled_start !== undefined) payload.scheduledStartDate = input.scheduled_start;
+  if (input.scheduled_end !== undefined) payload.scheduledEndDate = input.scheduled_end;
+  if (input.actual_start !== undefined) payload.actualStartDate = input.actual_start;
+  if (input.actual_end !== undefined) payload.actualEndDate = input.actual_end;
+  if (input.date_closed !== undefined) payload.dateClosed = input.date_closed;
+  if (input.is_owner_approved !== undefined) {
+    payload.isOwnerApproved = input.is_owner_approved ? "1" : "0";
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return { error: "No fields provided to update." };
+  }
+
+  const response = await client.updateWorkOrder(workOrderId, payload);
+  return {
+    work_order_id: workOrderId,
+    updated_fields: payload,
+    response,
+  };
 }
 
 export async function listApplications() {
