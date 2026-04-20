@@ -19,6 +19,13 @@ const WO_PRIORITY: Record<string, string> = {
   "4": "emergency",
 };
 
+const WO_STATUS_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(WO_STATUS).map(([id, name]) => [name, id])
+);
+const WO_PRIORITY_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(WO_PRIORITY).map(([id, name]) => [name, id])
+);
+
 type Row = Record<string, unknown>;
 
 function stripHtml(text: unknown): string {
@@ -135,6 +142,146 @@ export async function listWorkOrders() {
       date_closed: wo.dateClosed,
     };
   });
+}
+
+export interface WorkOrderCreateInput {
+  description: string;
+  property_id: string;
+  priority: string;
+  unit_id?: string;
+  status?: string;
+  estimated_amount?: number | string;
+  vendor_contact_id?: string;
+  is_owner_approved?: boolean;
+  scheduled_start?: string;
+  scheduled_end?: string;
+}
+
+export async function createWorkOrder(input: WorkOrderCreateInput) {
+  if (!input.description) return { error: "description is required." };
+  if (!input.property_id) return { error: "property_id is required." };
+  if (!input.priority) return { error: "priority is required." };
+
+  const priorityID = WO_PRIORITY_TO_ID[input.priority];
+  if (!priorityID) {
+    return {
+      error: `Invalid priority '${input.priority}'. Expected one of: ${Object.keys(WO_PRIORITY_TO_ID).join(", ")}.`,
+    };
+  }
+
+  const payload: Record<string, unknown> = {
+    description: input.description,
+    propertyID: input.property_id,
+    priorityID,
+  };
+
+  if (input.unit_id !== undefined) payload.unitID = input.unit_id;
+
+  if (input.status !== undefined) {
+    const statusID = WO_STATUS_TO_ID[input.status];
+    if (!statusID) {
+      return {
+        error: `Invalid status '${input.status}'. Expected one of: ${Object.keys(WO_STATUS_TO_ID).join(", ")}.`,
+      };
+    }
+    payload.primaryWorkOrderStatusID = statusID;
+  }
+
+  if (input.estimated_amount !== undefined) payload.estimatedAmount = String(input.estimated_amount);
+  if (input.vendor_contact_id !== undefined) payload.vendorContactID = input.vendor_contact_id;
+  if (input.is_owner_approved !== undefined) {
+    payload.isOwnerApproved = input.is_owner_approved ? "1" : "0";
+  }
+  if (input.scheduled_start !== undefined) payload.scheduledStartDate = input.scheduled_start;
+  if (input.scheduled_end !== undefined) payload.scheduledEndDate = input.scheduled_end;
+
+  const response = await client.createWorkOrder(payload);
+  const created = asObj((response as Row)?.workOrder ?? response);
+  return {
+    work_order_id: created.workOrderID,
+    work_order_number: created.workOrderNumber,
+    property_id: created.propertyID,
+    unit_id: created.unitID,
+    status: WO_STATUS[s(created.primaryWorkOrderStatusID)] ?? "unknown",
+    priority: WO_PRIORITY[s(created.priorityID)] ?? "unknown",
+    estimated_amount: created.estimatedAmount,
+    description: stripHtml(created.description),
+    sent_payload: payload,
+  };
+}
+
+export interface WorkOrderUpdateInput {
+  status?: string;
+  priority?: string;
+  description?: string;
+  estimated_amount?: number | string;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  actual_start?: string;
+  actual_end?: string;
+  date_closed?: string;
+  is_owner_approved?: boolean;
+}
+
+export async function updateWorkOrder(
+  workOrderId: string,
+  input: WorkOrderUpdateInput
+) {
+  if (!workOrderId) {
+    return { error: "work_order_id is required." };
+  }
+
+  const payload: Record<string, unknown> = {};
+
+  if (input.status !== undefined) {
+    const id = WO_STATUS_TO_ID[input.status];
+    if (!id) {
+      return {
+        error: `Invalid status '${input.status}'. Expected one of: ${Object.keys(WO_STATUS_TO_ID).join(", ")}.`,
+      };
+    }
+    payload.primaryWorkOrderStatusID = id;
+    // Auto-stamp dateClosed when caller marks completed/cancelled and didn't
+    // supply one explicitly — matches how Rentvine's UI behaves.
+    if (
+      (input.status === "completed" || input.status === "cancelled") &&
+      input.date_closed === undefined
+    ) {
+      payload.dateClosed = new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  if (input.priority !== undefined) {
+    const id = WO_PRIORITY_TO_ID[input.priority];
+    if (!id) {
+      return {
+        error: `Invalid priority '${input.priority}'. Expected one of: ${Object.keys(WO_PRIORITY_TO_ID).join(", ")}.`,
+      };
+    }
+    payload.priorityID = id;
+  }
+
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.estimated_amount !== undefined) payload.estimatedAmount = String(input.estimated_amount);
+  if (input.scheduled_start !== undefined) payload.scheduledStartDate = input.scheduled_start;
+  if (input.scheduled_end !== undefined) payload.scheduledEndDate = input.scheduled_end;
+  if (input.actual_start !== undefined) payload.actualStartDate = input.actual_start;
+  if (input.actual_end !== undefined) payload.actualEndDate = input.actual_end;
+  if (input.date_closed !== undefined) payload.dateClosed = input.date_closed;
+  if (input.is_owner_approved !== undefined) {
+    payload.isOwnerApproved = input.is_owner_approved ? "1" : "0";
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return { error: "No fields provided to update." };
+  }
+
+  const response = await client.updateWorkOrder(workOrderId, payload);
+  return {
+    work_order_id: workOrderId,
+    updated_fields: payload,
+    response,
+  };
 }
 
 export async function listApplications() {

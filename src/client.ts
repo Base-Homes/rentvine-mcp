@@ -26,24 +26,47 @@ function unwrap(data: unknown): Record<string, unknown>[] {
   return [];
 }
 
-async function get(path: string, params?: Record<string, string>): Promise<unknown> {
+async function request(
+  method: string,
+  path: string,
+  opts: { params?: Record<string, string>; body?: unknown } = {}
+): Promise<unknown> {
   const { baseUrl, headers } = getClientArgs();
   const url = new URL(`${baseUrl}${path}`);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  if (opts.params) {
+    for (const [k, v] of Object.entries(opts.params)) url.searchParams.set(k, v);
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
+  const init: RequestInit = {
+    method,
+    headers: {
+      ...headers,
+      ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    signal: controller.signal,
+  };
+  if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
   try {
-    const resp = await fetch(url, { headers, signal: controller.signal });
+    const resp = await fetch(url, init);
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       throw new Error(`Rentvine ${resp.status} ${resp.statusText}: ${body.slice(0, 200)}`);
     }
-    return await resp.json();
+    const text = await resp.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function get(path: string, params?: Record<string, string>): Promise<unknown> {
+  return request("GET", path, { params });
 }
 
 export async function fetchProperties() {
@@ -76,4 +99,27 @@ export async function fetchInspections() {
 
 export async function fetchTenantBalance(tenantRentvineId: string): Promise<unknown> {
   return await get("/accounting/ledgers/search", { tenantId: tenantRentvineId });
+}
+
+export async function createWorkOrder(
+  body: Record<string, unknown>
+): Promise<unknown> {
+  // Create contract mirrors update: POST to the collection path, bare body
+  // (no { workOrder: {...} } envelope). Minimal required fields are
+  // description, propertyID, and priorityID — Rentvine auto-fills unitID
+  // from the property and defaults primaryWorkOrderStatusID to 1 (open).
+  return await request("POST", "/maintenance/work-orders", { body });
+}
+
+export async function updateWorkOrder(
+  workOrderId: string,
+  updates: Record<string, unknown>
+): Promise<unknown> {
+  // Rentvine's update contract is POST (not PUT/PATCH) to the singular
+  // resource path, with a *bare* body — no { workOrder: {...} } envelope, even
+  // though reads return one. Envelope POSTs return 200 but silently no-op.
+  // Partial bodies are honored; only send the fields you want to change.
+  return await request("POST", `/maintenance/work-orders/${workOrderId}`, {
+    body: updates,
+  });
 }
