@@ -509,8 +509,9 @@ export async function listAccounts() {
 }
 
 export interface FileUploadInput {
-  file_content_base64: string;
-  file_name: string;
+  file_path?: string;
+  file_content_base64?: string;
+  file_name?: string;
   object_type_id?: number;
   object_id?: number;
 }
@@ -572,10 +573,24 @@ export async function listObjectTypes() {
 }
 
 export async function uploadFile(input: FileUploadInput) {
-  const buffer = Buffer.from(input.file_content_base64, "base64");
+  let buffer: Buffer;
+  let fileName: string;
+
+  if (input.file_path) {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    buffer = Buffer.from(await fs.readFile(input.file_path));
+    fileName = input.file_name ?? path.basename(input.file_path);
+  } else if (input.file_content_base64 && input.file_name) {
+    buffer = Buffer.from(input.file_content_base64, "base64");
+    fileName = input.file_name;
+  } else {
+    throw new Error("Provide either file_path or both file_content_base64 and file_name.");
+  }
+
   const response = await client.uploadFile(
     buffer,
-    input.file_name,
+    fileName,
     input.object_id,
     input.object_type_id
   );

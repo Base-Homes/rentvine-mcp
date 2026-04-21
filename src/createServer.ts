@@ -473,10 +473,11 @@ export function createServer(): McpServer {
     "upload_file",
     {
       description:
-        "Upload a file to Rentvine and optionally attach it to a work order, property, lease, or unit (live data, write). File content must be base64-encoded. Use list_object_types to get valid object_type_id values.",
+        "Upload a file to Rentvine and optionally attach it to a work order, property, lease, or unit (live data, write). Prefer file_path for local files — faster and avoids base64 overhead. Use file_content_base64 + file_name only for remote deployments where a file path is unavailable. Use list_object_types to get valid object_type_id values.",
       inputSchema: {
-        file_content_base64: z.string().describe("Base64-encoded file content."),
-        file_name: z.string().describe("File name with extension, e.g. 'invoice.pdf'."),
+        file_path: z.string().optional().describe("Absolute path to a local file (e.g. '/Users/you/Downloads/invoice.pdf'). Preferred over base64 — the server reads the file directly."),
+        file_content_base64: z.string().optional().describe("Base64-encoded file content. Use only when a local file path is unavailable. Requires file_name."),
+        file_name: z.string().optional().describe("File name with extension, e.g. 'invoice.pdf'. Required when using file_content_base64; inferred from file_path if omitted."),
         object_type_id: z.number().optional().describe("Rentvine object type ID to attach the file to. Use list_object_types to find valid values (e.g. 7 = Unit)."),
         object_id: z.number().optional().describe("ID of the object to attach the file to (e.g. unitID, workOrderID)."),
       },
