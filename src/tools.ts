@@ -582,6 +582,14 @@ export async function uploadFile(input: FileUploadInput) {
     buffer = Buffer.from(await fs.readFile(input.file_path));
     fileName = input.file_name ?? path.basename(input.file_path);
   } else if (input.file_content_base64 && input.file_name) {
+    const BASE64_LIMIT = 500_000;
+    if (input.file_content_base64.length > BASE64_LIMIT) {
+      const rawKB = Math.round(input.file_content_base64.length * 0.75 / 1024);
+      throw new Error(
+        `File is ~${rawKB}KB — too large to pass as base64 (limit ~375KB raw). ` +
+        `Use file_path instead: upload_file(file_path="/absolute/path/to/file", ...)`
+      );
+    }
     buffer = Buffer.from(input.file_content_base64, "base64");
     fileName = input.file_name;
   } else {
