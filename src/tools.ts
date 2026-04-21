@@ -108,13 +108,17 @@ export async function listUnits(propertyName: string) {
   return units.map((row) => {
     const u = asObj(row.unit ?? row);
     return {
+      unit_id: u.unitID,
+      property_id: rvId,
       unit_number: u.number ?? u.unitNumber ?? u.name,
       address: u.address,
+      is_active: u.isActive,
       status: u.status ?? (u.isVacant ? "vacant" : "occupied"),
       rent: u.rent ?? u.marketRent,
       deposit: u.deposit,
       beds: u.beds,
       baths: u.fullBaths,
+      sqft: u.size,
     };
   });
 }
@@ -331,4 +335,281 @@ export async function getTenantBalance(tenantName: string) {
 
   const data = await client.fetchTenantBalance(String(rvId));
   return { tenant_name: tenantName, ledger: data };
+}
+
+export async function listOwners() {
+  const rows = await client.fetchOwners();
+  return rows.map((row) => {
+    const c = asObj(row.contact ?? row);
+    return {
+      contact_id: c.contactID,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      postal_code: c.postalCode,
+    };
+  });
+}
+
+export async function listVendors() {
+  const rows = await client.fetchVendors();
+  return rows.map((row) => {
+    const c = asObj(row.contact ?? row);
+    return {
+      contact_id: c.contactID,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      postal_code: c.postalCode,
+      insurance_expiration: c.insuranceExpiration ?? c.insuranceExpirationDate,
+    };
+  });
+}
+
+export async function listPortfolios() {
+  const rows = await client.fetchPortfolios();
+  return rows.map((row) => {
+    const p = asObj(row.portfolio ?? row);
+    const owners = Array.isArray(p.owners)
+      ? (p.owners as unknown[]).map((o) => {
+          const oc = asObj((o as Record<string, unknown>).contact ?? o);
+          return { contact_id: oc.contactID, name: oc.name };
+        })
+      : [];
+    return {
+      portfolio_id: p.portfolioID,
+      name: p.name,
+      is_active: p.isActive,
+      reserve_amount: p.reserveAmount,
+      owners,
+    };
+  });
+}
+
+export async function listBills() {
+  const rows = await client.fetchBills();
+  return rows.map((row) => {
+    const b = asObj(row.bill ?? row);
+    return {
+      bill_id: b.billID,
+      bill_type_id: b.billTypeID,
+      payee_contact_id: b.payeeContactID,
+      bill_date: b.billDate,
+      date_due: b.dateDue,
+      is_voided: b.isVoided,
+      reference: b.reference,
+      payment_memo: b.paymentMemo,
+      work_order_id: b.workOrderID,
+    };
+  });
+}
+
+export interface BillCreateInput {
+  payee_contact_id: number;
+  bill_date: string;
+  due_date: string;
+  bill_type_id: number;
+  reference?: string;
+  payment_memo?: string;
+  work_order_id?: string;
+  charges?: unknown[];
+}
+
+export async function createBill(input: BillCreateInput) {
+  const payload: Record<string, unknown> = {
+    payeeContactID: input.payee_contact_id,
+    billDate: input.bill_date,
+    dateDue: input.due_date,
+    billTypeID: input.bill_type_id,
+    isVoided: false,
+    isDiscount: false,
+    isMarkup: false,
+    managementFeeMode: 0,
+  };
+  if (input.reference !== undefined) payload.reference = input.reference;
+  if (input.payment_memo !== undefined) payload.paymentMemo = input.payment_memo;
+  if (input.work_order_id !== undefined) payload.workOrderID = input.work_order_id;
+  if (input.charges !== undefined) payload.charges = input.charges;
+
+  const response = await client.createBill(payload);
+  const b = asObj((response as Record<string, unknown>)?.bill ?? response);
+  return {
+    bill_id: b.billID,
+    payee_contact_id: b.payeeContactID,
+    bill_date: b.billDate,
+    date_due: b.dateDue,
+    reference: b.reference,
+  };
+}
+
+export interface TransactionSearchInput {
+  search?: string;
+  date_min?: string;
+  date_max?: string;
+  amount_min?: string;
+  amount_max?: string;
+  is_voided?: boolean;
+  page?: number;
+  page_size?: number;
+}
+
+export async function searchTransactions(input: TransactionSearchInput) {
+  const params: Record<string, string> = {};
+  if (input.search) params.search = input.search;
+  if (input.date_min) params.datePostedMin = input.date_min;
+  if (input.date_max) params.datePostedMax = input.date_max;
+  if (input.amount_min !== undefined) params.amountMin = input.amount_min;
+  if (input.amount_max !== undefined) params.amountMax = input.amount_max;
+  if (input.is_voided !== undefined) params.isVoided = String(input.is_voided);
+  if (input.page !== undefined) params.page = String(input.page);
+  if (input.page_size !== undefined) params.pageSize = String(input.page_size);
+
+  const data = await client.searchTransactions(params);
+  const rows = Array.isArray(data)
+    ? data
+    : ((data as Record<string, unknown>)?.data as unknown[] ?? []);
+  return (rows as Record<string, unknown>[]).map((row) => {
+    const t = asObj(row.transaction ?? row);
+    const ledger = asObj(row.ledger ?? {});
+    const property = asObj(row.property ?? {});
+    return {
+      transaction_id: t.transactionID,
+      type: t.type,
+      amount: t.amount,
+      description: t.description,
+      reference: t.reference,
+      date_posted: t.datePosted,
+      is_voided: t.isVoided,
+      ledger_name: ledger.name,
+      property_name: property.name,
+    };
+  });
+}
+
+export async function listAccounts() {
+  const rows = await client.fetchAccounts();
+  return rows.map((row) => {
+    const a = asObj(row.account ?? row);
+    const cat = asObj(row.accountCategory ?? {});
+    return {
+      account_id: a.accountID,
+      number: a.number,
+      name: a.name,
+      is_active: a.isActive,
+      category: cat.name,
+      account_type_id: a.accountTypeID,
+    };
+  });
+}
+
+export interface FileUploadInput {
+  file_path?: string;
+  file_content_base64?: string;
+  file_name?: string;
+  object_type_id?: number;
+  object_id?: number;
+}
+
+export async function listObjectTypes() {
+  return [
+    { object_type_id: 1,  name: "Account" },
+    { object_type_id: 2,  name: "User" },
+    { object_type_id: 3,  name: "Contact" },
+    { object_type_id: 4,  name: "Lease" },
+    { object_type_id: 5,  name: "Bill" },
+    { object_type_id: 6,  name: "Property" },
+    { object_type_id: 7,  name: "Unit" },
+    { object_type_id: 8,  name: "Deposit" },
+    { object_type_id: 9,  name: "Accounting Transaction" },
+    { object_type_id: 10, name: "Accounting Transaction Entry" },
+    { object_type_id: 11, name: "Portfolio" },
+    { object_type_id: 12, name: "Payout" },
+    { object_type_id: 13, name: "Bank Adjustment" },
+    { object_type_id: 14, name: "Company" },
+    { object_type_id: 15, name: "Statement" },
+    { object_type_id: 16, name: "Work Order" },
+    { object_type_id: 17, name: "Inspection" },
+    { object_type_id: 18, name: "Inspection Area" },
+    { object_type_id: 19, name: "Inspection Item" },
+    { object_type_id: 20, name: "Application" },
+    { object_type_id: 21, name: "Applicant" },
+    { object_type_id: 22, name: "Bank Transfer" },
+    { object_type_id: 23, name: "Listing" },
+    { object_type_id: 24, name: "Appliance" },
+    { object_type_id: 25, name: "Text Message" },
+    { object_type_id: 26, name: "Email Message" },
+    { object_type_id: 27, name: "Work Order Estimate" },
+    { object_type_id: 28, name: "Settlement" },
+    { object_type_id: 29, name: "Lease Tenant" },
+    { object_type_id: 30, name: "Email Template" },
+    { object_type_id: 31, name: "Note" },
+    { object_type_id: 32, name: "File Attachment" },
+    { object_type_id: 33, name: "Vendor Bill" },
+    { object_type_id: 34, name: "Document Transaction" },
+    { object_type_id: 35, name: "Document Envelope" },
+    { object_type_id: 36, name: "Application Template" },
+    { object_type_id: 37, name: "Recurring Bill" },
+    { object_type_id: 38, name: "Chat Message" },
+    { object_type_id: 39, name: "Reconciliation" },
+    { object_type_id: 40, name: "Path" },
+    { object_type_id: 41, name: "Payout Return" },
+    { object_type_id: 42, name: "Management Fee Setting" },
+    { object_type_id: 43, name: "Additional Management Fee Setting" },
+    { object_type_id: 44, name: "Accounting Setting" },
+    { object_type_id: 45, name: "Posting Setting" },
+    { object_type_id: 46, name: "Late Fee Setting" },
+    { object_type_id: 47, name: "Statement Setting" },
+    { object_type_id: 48, name: "Payout Batch" },
+    { object_type_id: 49, name: "Letter" },
+    { object_type_id: 50, name: "Reminder" },
+    { object_type_id: 51, name: "Review" },
+  ];
+}
+
+export async function uploadFile(input: FileUploadInput) {
+  let buffer: Buffer;
+  let fileName: string;
+
+  if (input.file_path) {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    buffer = Buffer.from(await fs.readFile(input.file_path));
+    fileName = input.file_name ?? path.basename(input.file_path);
+  } else if (input.file_content_base64 && input.file_name) {
+    const BASE64_LIMIT = 500_000;
+    if (input.file_content_base64.length > BASE64_LIMIT) {
+      const rawKB = Math.round(input.file_content_base64.length * 0.75 / 1024);
+      throw new Error(
+        `File is ~${rawKB}KB — too large to pass as base64 (limit ~375KB raw). ` +
+        `Use file_path instead: upload_file(file_path="/absolute/path/to/file", ...)`
+      );
+    }
+    buffer = Buffer.from(input.file_content_base64, "base64");
+    fileName = input.file_name;
+  } else {
+    throw new Error("Provide either file_path or both file_content_base64 and file_name.");
+  }
+
+  const response = await client.uploadFile(
+    buffer,
+    fileName,
+    input.object_id,
+    input.object_type_id
+  );
+  const r = asObj(response as Record<string, unknown>);
+  const file = asObj(r.file ?? r);
+  const attachment = asObj(r.attachment ?? {});
+  return {
+    file_id: file.fileID,
+    file_name: file.fileName,
+    file_size: file.fileSize,
+    file_type: file.fileType,
+    attachment_id: attachment.fileAttachmentID ?? null,
+  };
 }

@@ -7,12 +7,23 @@ MCP server for [Rentvine](https://rentvine.com) — gives Claude (and any MCP cl
 | Tool | Description |
 |---|---|
 | `list_properties` | All properties with address, type, and active status |
-| `list_leases` | All leases with tenant, rent, dates, and status |
 | `list_units` | Units for a named property with vacancy and rent |
+| `list_leases` | All leases with tenant, rent, dates, and status |
 | `list_applications` | Rental applications with applicant and status |
 | `list_inspections` | Maintenance inspections with date and inspector |
 | `list_work_orders` | Work orders with status and priority |
+| `create_work_order` | Create a new maintenance work order |
+| `update_work_order` | Update status, priority, cost, or scheduling on a work order |
 | `get_tenant_balance` | Ledger balance for a named tenant |
+| `list_owners` | All property owners |
+| `list_vendors` | All vendors |
+| `list_portfolios` | All portfolios |
+| `list_bills` | All bills |
+| `create_bill` | Create a new bill |
+| `search_transactions` | Search accounting transactions by date, amount, or keyword |
+| `list_accounts` | Chart of accounts |
+| `list_object_types` | Rentvine object type IDs (for file attachment) |
+| `upload_file` | Upload a file and attach it to a property, unit, lease, or work order |
 
 ---
 
@@ -57,7 +68,7 @@ Requires Node.js 18+. Config file locations:
 - **VS Code (Copilot)** — `.vscode/mcp.json` in your workspace
 - **Continue** — `~/.continue/config.json`
 
-Restart your client after editing. You should see `rentvine` show up with all 7 tools.
+Restart your client after editing. You should see `rentvine` show up with all 18 tools.
 
 ### Your own MCP host (e.g. a custom agent)
 
@@ -82,7 +93,7 @@ ChatGPT accepts remote MCP servers over HTTPS, so you need to deploy the HTTP va
 | `RENTVINE_API_KEY` | Your Rentvine API key |
 | `RENTVINE_API_SECRET` | Your Rentvine API secret |
 | `RENTVINE_COMPANY` | Your subdomain |
-| `MCP_AUTH_TOKEN` | A long random string you generate (e.g. `openssl rand -hex 32`) — **required** for public deploys |
+| `MCP_AUTH_TOKEN` | A long random string you generate (e.g. `openssl rand -hex 32`) — **required** when binding to any non-loopback interface (the server will refuse to start without it) |
 | `PORT` | Whatever port your host expects (most default to 3000 or 8080) |
 
 Local smoke test:
@@ -112,6 +123,9 @@ Not available on ChatGPT Plus or Free — custom MCP connectors are gated to Bus
 | `RENTVINE_API_KEY` | Your Rentvine API key |
 | `RENTVINE_API_SECRET` | Your Rentvine API secret |
 | `RENTVINE_COMPANY` | Your subdomain (e.g. `acme` for `acme.rentvine.com`) |
+| `MCP_AUTH_TOKEN` | Bearer token for the HTTP transport. Required when `HOST` is not loopback. Generate with `openssl rand -hex 32`. |
+| `PORT` | HTTP server port (default: `3000`) |
+| `HOST` | HTTP server bind address (default: `0.0.0.0`). Use `127.0.0.1` for local-only without auth. |
 
 ---
 
@@ -125,6 +139,9 @@ How many units are vacant across all properties?
 Which leases expire in the next 60 days?
 Show me all open work orders sorted by priority.
 What is the balance for tenant [name]?
+Create a work order for the leaking roof at 123 Main St, high priority.
+Upload this invoice and attach it to work order #1042.
+Show me all unpaid bills.
 ```
 
 ---
