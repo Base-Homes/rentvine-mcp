@@ -473,13 +473,17 @@ export function createServer(): McpServer {
     "upload_file",
     {
       description:
-        "Upload a file to Rentvine and optionally attach it to a work order, property, lease, or unit (live data, write). Prefer file_path for local files — faster and avoids base64 overhead. Use file_content_base64 + file_name only for remote deployments where a file path is unavailable. Use list_object_types to get valid object_type_id values.",
+        "Upload a file to Rentvine and optionally attach it to a work order, property, lease, or unit (live data, write). " +
+        "ALWAYS use file_path when the file exists on disk — pass the absolute path and the server reads it directly. " +
+        "NEVER use file_content_base64 for local files; it is extremely slow and fills the context window. " +
+        "file_content_base64 exists only for remote/HTTP deployments with no shared filesystem. " +
+        "Use list_object_types to get valid object_type_id values.",
       inputSchema: {
-        file_path: z.string().optional().describe("Absolute path to a local file (e.g. '/Users/you/Downloads/invoice.pdf'). Preferred over base64 — the server reads the file directly."),
-        file_content_base64: z.string().optional().describe("Base64-encoded file content. Use only when a local file path is unavailable. Requires file_name."),
-        file_name: z.string().optional().describe("File name with extension, e.g. 'invoice.pdf'. Required when using file_content_base64; inferred from file_path if omitted."),
+        file_path: z.string().optional().describe("Absolute path to the file on disk (e.g. '/Users/you/Downloads/invoice.pdf'). USE THIS for any file you can reference by path. The server reads it directly — no encoding needed."),
         object_type_id: z.number().optional().describe("Rentvine object type ID to attach the file to. Use list_object_types to find valid values (e.g. 7 = Unit)."),
         object_id: z.number().optional().describe("ID of the object to attach the file to (e.g. unitID, workOrderID)."),
+        file_name: z.string().optional().describe("Override the file name. If omitted, inferred from file_path."),
+        file_content_base64: z.string().optional().describe("LAST RESORT ONLY — base64-encoded file content for remote deployments with no filesystem access. Do not use this for local files; use file_path instead."),
       },
     },
     async (args) => jsonResult(await tools.uploadFile(args))
