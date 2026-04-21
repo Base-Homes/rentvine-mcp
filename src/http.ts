@@ -73,12 +73,21 @@ async function handleSessionRequest(req: Request, res: Response) {
 app.get("/mcp", requireAuth, handleSessionRequest);
 app.delete("/mcp", requireAuth, handleSessionRequest);
 
+const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
+if (!AUTH_TOKEN && !LOOPBACK.has(HOST)) {
+  console.error(
+    "FATAL: MCP_AUTH_TOKEN must be set when binding to a non-loopback interface. " +
+      "Generate one with: openssl rand -hex 32"
+  );
+  process.exit(1);
+}
+
 app.listen(PORT, HOST, () => {
   console.log(`rentvine-mcp HTTP listening on http://${HOST}:${PORT}/mcp`);
   if (!AUTH_TOKEN) {
     console.warn(
       "WARNING: MCP_AUTH_TOKEN is not set — the /mcp endpoint is unauthenticated. " +
-        "Set MCP_AUTH_TOKEN before exposing this server publicly."
+        "Acceptable for local use only (bound to loopback)."
     );
   }
 });
