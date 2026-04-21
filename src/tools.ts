@@ -332,3 +332,212 @@ export async function getTenantBalance(tenantName: string) {
   const data = await client.fetchTenantBalance(String(rvId));
   return { tenant_name: tenantName, ledger: data };
 }
+
+export async function listOwners() {
+  const rows = await client.fetchOwners();
+  return rows.map((row) => {
+    const c = asObj(row.contact ?? row);
+    return {
+      contact_id: c.contactID,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      postal_code: c.postalCode,
+    };
+  });
+}
+
+export async function listVendors() {
+  const rows = await client.fetchVendors();
+  return rows.map((row) => {
+    const c = asObj(row.contact ?? row);
+    return {
+      contact_id: c.contactID,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      postal_code: c.postalCode,
+      insurance_expiration: c.insuranceExpiration ?? c.insuranceExpirationDate,
+    };
+  });
+}
+
+export async function listPortfolios() {
+  const rows = await client.fetchPortfolios();
+  return rows.map((row) => {
+    const p = asObj(row.portfolio ?? row);
+    const owners = Array.isArray(p.owners)
+      ? (p.owners as unknown[]).map((o) => {
+          const oc = asObj((o as Record<string, unknown>).contact ?? o);
+          return { contact_id: oc.contactID, name: oc.name };
+        })
+      : [];
+    return {
+      portfolio_id: p.portfolioID,
+      name: p.name,
+      is_active: p.isActive,
+      reserve_amount: p.reserveAmount,
+      owners,
+    };
+  });
+}
+
+export async function listBills() {
+  const rows = await client.fetchBills();
+  return rows.map((row) => {
+    const b = asObj(row.bill ?? row);
+    return {
+      bill_id: b.billID,
+      bill_type_id: b.billTypeID,
+      payee_contact_id: b.payeeContactID,
+      bill_date: b.billDate,
+      date_due: b.dateDue,
+      is_voided: b.isVoided,
+      reference: b.reference,
+      payment_memo: b.paymentMemo,
+      work_order_id: b.workOrderID,
+    };
+  });
+}
+
+export interface BillCreateInput {
+  payee_contact_id: number;
+  bill_date: string;
+  due_date: string;
+  bill_type_id: number;
+  reference?: string;
+  payment_memo?: string;
+  work_order_id?: string;
+  charges?: unknown[];
+}
+
+export async function createBill(input: BillCreateInput) {
+  const payload: Record<string, unknown> = {
+    payeeContactID: input.payee_contact_id,
+    billDate: input.bill_date,
+    dateDue: input.due_date,
+    billTypeID: input.bill_type_id,
+    isVoided: false,
+    isDiscount: false,
+    isMarkup: false,
+    managementFeeMode: 0,
+  };
+  if (input.reference !== undefined) payload.reference = input.reference;
+  if (input.payment_memo !== undefined) payload.paymentMemo = input.payment_memo;
+  if (input.work_order_id !== undefined) payload.workOrderID = input.work_order_id;
+  if (input.charges !== undefined) payload.charges = input.charges;
+
+  const response = await client.createBill(payload);
+  const b = asObj((response as Record<string, unknown>)?.bill ?? response);
+  return {
+    bill_id: b.billID,
+    payee_contact_id: b.payeeContactID,
+    bill_date: b.billDate,
+    date_due: b.dateDue,
+    reference: b.reference,
+  };
+}
+
+export interface TransactionSearchInput {
+  search?: string;
+  date_min?: string;
+  date_max?: string;
+  amount_min?: string;
+  amount_max?: string;
+  is_voided?: boolean;
+  page?: number;
+  page_size?: number;
+}
+
+export async function searchTransactions(input: TransactionSearchInput) {
+  const params: Record<string, string> = {};
+  if (input.search) params.search = input.search;
+  if (input.date_min) params.datePostedMin = input.date_min;
+  if (input.date_max) params.datePostedMax = input.date_max;
+  if (input.amount_min !== undefined) params.amountMin = input.amount_min;
+  if (input.amount_max !== undefined) params.amountMax = input.amount_max;
+  if (input.is_voided !== undefined) params.isVoided = String(input.is_voided);
+  if (input.page !== undefined) params.page = String(input.page);
+  if (input.page_size !== undefined) params.pageSize = String(input.page_size);
+
+  const data = await client.searchTransactions(params);
+  const rows = Array.isArray(data)
+    ? data
+    : ((data as Record<string, unknown>)?.data as unknown[] ?? []);
+  return (rows as Record<string, unknown>[]).map((row) => {
+    const t = asObj(row.transaction ?? row);
+    const ledger = asObj(row.ledger ?? {});
+    const property = asObj(row.property ?? {});
+    return {
+      transaction_id: t.transactionID,
+      type: t.type,
+      amount: t.amount,
+      description: t.description,
+      reference: t.reference,
+      date_posted: t.datePosted,
+      is_voided: t.isVoided,
+      ledger_name: ledger.name,
+      property_name: property.name,
+    };
+  });
+}
+
+export async function listAccounts() {
+  const rows = await client.fetchAccounts();
+  return rows.map((row) => {
+    const a = asObj(row.account ?? row);
+    const cat = asObj(row.accountCategory ?? {});
+    return {
+      account_id: a.accountID,
+      number: a.number,
+      name: a.name,
+      is_active: a.isActive,
+      category: cat.name,
+      account_type_id: a.accountTypeID,
+    };
+  });
+}
+
+export interface FileUploadInput {
+  file_content_base64: string;
+  file_name: string;
+  object_type_id?: number;
+  object_id?: number;
+}
+
+export async function listObjectTypes() {
+  const rows = await client.fetchObjectTypes();
+  return rows.map((row) => {
+    const t = asObj(row.objectType ?? row);
+    return {
+      object_type_id: t.objectTypeID ?? t.id,
+      name: t.name ?? t.objectType,
+    };
+  });
+}
+
+export async function uploadFile(input: FileUploadInput) {
+  const buffer = Buffer.from(input.file_content_base64, "base64");
+  const response = await client.uploadFile(
+    buffer,
+    input.file_name,
+    input.object_id,
+    input.object_type_id
+  );
+  const r = asObj(response as Record<string, unknown>);
+  const file = asObj(r.file ?? r);
+  const attachment = asObj(r.attachment ?? {});
+  return {
+    file_id: file.fileID,
+    file_name: file.fileName,
+    file_size: file.fileSize,
+    file_type: file.fileType,
+    attachment_id: attachment.fileAttachmentID ?? null,
+  };
+}

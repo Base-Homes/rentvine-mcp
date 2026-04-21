@@ -157,5 +157,118 @@ export function createServer(): McpServer {
     async ({ tenant_name }) => jsonResult(await tools.getTenantBalance(tenant_name))
   );
 
+  server.registerTool(
+    "list_owners",
+    {
+      description:
+        "List all property owners from Rentvine (live data). Returns owner name, contact ID, email, phone, and address. Use this to look up who owns a property or to get a contact ID for bill creation.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.listOwners())
+  );
+
+  server.registerTool(
+    "list_vendors",
+    {
+      description:
+        "List all vendors from Rentvine (live data). Returns vendor name, contact ID, email, phone, and insurance expiration. Use this to find vendors for work order assignment or bill creation.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.listVendors())
+  );
+
+  server.registerTool(
+    "list_portfolios",
+    {
+      description:
+        "List all portfolios from Rentvine (live data). Returns portfolio name, ID, active status, reserve amount, and associated owners.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.listPortfolios())
+  );
+
+  server.registerTool(
+    "list_bills",
+    {
+      description:
+        "List all bills from Rentvine (live data). Returns bill ID, payee, dates, voided status, and linked work order. Use this to review outstanding vendor invoices.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.listBills())
+  );
+
+  server.registerTool(
+    "create_bill",
+    {
+      description:
+        "Create a bill in Rentvine (live data, write). Requires a payee contact ID (from list_vendors or list_owners), bill date, due date, and bill type ID. Optionally link to a work order.",
+      inputSchema: {
+        payee_contact_id: z.number().describe("Rentvine contact ID of the payee (vendor or owner). Get from list_vendors or list_owners."),
+        bill_date: z.string().describe("Date of the bill (YYYY-MM-DD)."),
+        due_date: z.string().describe("Payment due date (YYYY-MM-DD)."),
+        bill_type_id: z.number().describe("Rentvine bill type ID. Check your Rentvine settings for valid values."),
+        reference: z.string().optional().describe("Invoice or reference number."),
+        payment_memo: z.string().optional().describe("Memo to include on payment."),
+        work_order_id: z.string().optional().describe("Link this bill to a work order ID."),
+        charges: z.array(z.record(z.unknown())).optional().describe("Line item charges array. Each charge should include accountID, amount, and description."),
+      },
+    },
+    async (args) => jsonResult(await tools.createBill(args))
+  );
+
+  server.registerTool(
+    "search_transactions",
+    {
+      description:
+        "Search accounting transactions in Rentvine (live data). Filter by keyword, date range, or amount range. Returns transaction type, amount, description, date, and associated property/ledger. Paginated — use page and page_size for large result sets.",
+      inputSchema: {
+        search: z.string().optional().describe("Filter by description, name, amount, or address."),
+        date_min: z.string().optional().describe("Earliest posted date (YYYY-MM-DD)."),
+        date_max: z.string().optional().describe("Latest posted date (YYYY-MM-DD)."),
+        amount_min: z.string().optional().describe("Minimum transaction amount."),
+        amount_max: z.string().optional().describe("Maximum transaction amount."),
+        is_voided: z.boolean().optional().describe("Filter to voided (true) or active (false) transactions only."),
+        page: z.number().optional().describe("Page number (default 1)."),
+        page_size: z.number().optional().describe("Results per page (default 15)."),
+      },
+    },
+    async (args) => jsonResult(await tools.searchTransactions(args))
+  );
+
+  server.registerTool(
+    "list_accounts",
+    {
+      description:
+        "List the chart of accounts from Rentvine (live data). Returns account ID, number, name, category, and active status. Useful for identifying accountIDs when creating bill charges.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.listAccounts())
+  );
+
+  server.registerTool(
+    "upload_file",
+    {
+      description:
+        "Upload a file to Rentvine and optionally attach it to a work order, property, lease, or unit (live data, write). File content must be base64-encoded. Use list_object_types to get valid object_type_id values.",
+      inputSchema: {
+        file_content_base64: z.string().describe("Base64-encoded file content."),
+        file_name: z.string().describe("File name with extension, e.g. 'invoice.pdf'."),
+        object_type_id: z.number().optional().describe("Rentvine object type ID to attach the file to. Use list_object_types to find valid values (e.g. 7 = Unit)."),
+        object_id: z.number().optional().describe("ID of the object to attach the file to (e.g. unitID, workOrderID)."),
+      },
+    },
+    async (args) => jsonResult(await tools.uploadFile(args))
+  );
+
+  server.registerTool(
+    "list_object_types",
+    {
+      description:
+        "List Rentvine object types (live data). Returns object type IDs and names. Use this to find the correct object_type_id when uploading files or attaching documents.",
+      inputSchema: {},
+    },
+    async () => jsonResult(await tools.listObjectTypes())
+  );
+
   return server;
 }
