@@ -108,13 +108,17 @@ export async function listUnits(propertyName: string) {
   return units.map((row) => {
     const u = asObj(row.unit ?? row);
     return {
+      unit_id: u.unitID,
+      property_id: rvId,
       unit_number: u.number ?? u.unitNumber ?? u.name,
       address: u.address,
+      is_active: u.isActive,
       status: u.status ?? (u.isVacant ? "vacant" : "occupied"),
       rent: u.rent ?? u.marketRent,
       deposit: u.deposit,
       beds: u.beds,
       baths: u.fullBaths,
+      sqft: u.size,
     };
   });
 }
@@ -512,14 +516,59 @@ export interface FileUploadInput {
 }
 
 export async function listObjectTypes() {
-  const rows = await client.fetchObjectTypes();
-  return rows.map((row) => {
-    const t = asObj(row.objectType ?? row);
-    return {
-      object_type_id: t.objectTypeID ?? t.id,
-      name: t.name ?? t.objectType,
-    };
-  });
+  return [
+    { object_type_id: 1,  name: "Account" },
+    { object_type_id: 2,  name: "User" },
+    { object_type_id: 3,  name: "Contact" },
+    { object_type_id: 4,  name: "Lease" },
+    { object_type_id: 5,  name: "Bill" },
+    { object_type_id: 6,  name: "Property" },
+    { object_type_id: 7,  name: "Unit" },
+    { object_type_id: 8,  name: "Deposit" },
+    { object_type_id: 9,  name: "Accounting Transaction" },
+    { object_type_id: 10, name: "Accounting Transaction Entry" },
+    { object_type_id: 11, name: "Portfolio" },
+    { object_type_id: 12, name: "Payout" },
+    { object_type_id: 13, name: "Bank Adjustment" },
+    { object_type_id: 14, name: "Company" },
+    { object_type_id: 15, name: "Statement" },
+    { object_type_id: 16, name: "Work Order" },
+    { object_type_id: 17, name: "Inspection" },
+    { object_type_id: 18, name: "Inspection Area" },
+    { object_type_id: 19, name: "Inspection Item" },
+    { object_type_id: 20, name: "Application" },
+    { object_type_id: 21, name: "Applicant" },
+    { object_type_id: 22, name: "Bank Transfer" },
+    { object_type_id: 23, name: "Listing" },
+    { object_type_id: 24, name: "Appliance" },
+    { object_type_id: 25, name: "Text Message" },
+    { object_type_id: 26, name: "Email Message" },
+    { object_type_id: 27, name: "Work Order Estimate" },
+    { object_type_id: 28, name: "Settlement" },
+    { object_type_id: 29, name: "Lease Tenant" },
+    { object_type_id: 30, name: "Email Template" },
+    { object_type_id: 31, name: "Note" },
+    { object_type_id: 32, name: "File Attachment" },
+    { object_type_id: 33, name: "Vendor Bill" },
+    { object_type_id: 34, name: "Document Transaction" },
+    { object_type_id: 35, name: "Document Envelope" },
+    { object_type_id: 36, name: "Application Template" },
+    { object_type_id: 37, name: "Recurring Bill" },
+    { object_type_id: 38, name: "Chat Message" },
+    { object_type_id: 39, name: "Reconciliation" },
+    { object_type_id: 40, name: "Path" },
+    { object_type_id: 41, name: "Payout Return" },
+    { object_type_id: 42, name: "Management Fee Setting" },
+    { object_type_id: 43, name: "Additional Management Fee Setting" },
+    { object_type_id: 44, name: "Accounting Setting" },
+    { object_type_id: 45, name: "Posting Setting" },
+    { object_type_id: 46, name: "Late Fee Setting" },
+    { object_type_id: 47, name: "Statement Setting" },
+    { object_type_id: 48, name: "Payout Batch" },
+    { object_type_id: 49, name: "Letter" },
+    { object_type_id: 50, name: "Reminder" },
+    { object_type_id: 51, name: "Review" },
+  ];
 }
 
 export async function uploadFile(input: FileUploadInput) {
