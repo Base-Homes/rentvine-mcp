@@ -16,7 +16,9 @@ MCP server for [Rentvine](https://rentvine.com) — gives Claude (and any MCP cl
 | `update_work_order` | Update status, priority, cost, or scheduling on a work order |
 | `get_tenant_balance` | Ledger balance for a named tenant |
 | `list_owners` | All property owners |
-| `list_vendors` | All vendors |
+| `list_vendors` | All vendors with full contact, insurance, billing, and audit fields (45 fields) |
+| `get_vendor` | Single vendor's full detail record — includes `code` field, website, name components, QuickBooks linkage |
+| `vendors_near` | Vendors within N miles of a property, sorted by distance (ZIP-centroid approximation) |
 | `list_portfolios` | All portfolios |
 | `list_bills` | All bills |
 | `create_bill` | Create a new bill |
@@ -24,6 +26,10 @@ MCP server for [Rentvine](https://rentvine.com) — gives Claude (and any MCP cl
 | `list_accounts` | Chart of accounts |
 | `list_object_types` | Rentvine object type IDs (for file attachment) |
 | `upload_file` | Upload a file and attach it to a property, unit, lease, or work order |
+| `list_attachments` | Files attached to any Rentvine object (by object ID + type) |
+| `list_work_order_attachments` | Images and files attached to a specific work order |
+| `get_file` | Metadata for a single file (name, size, mime type) — no download |
+| `download_file` | Download a file as base64 (images, PDFs, up to ~375 KB) |
 
 ---
 
@@ -68,7 +74,7 @@ Requires Node.js 18+. Config file locations:
 - **VS Code (Copilot)** — `.vscode/mcp.json` in your workspace
 - **Continue** — `~/.continue/config.json`
 
-Restart your client after editing. You should see `rentvine` show up with all 18 tools.
+Restart your client after editing. You should see `rentvine` show up with all 24 tools.
 
 ### Your own MCP host (e.g. a custom agent)
 
@@ -142,6 +148,10 @@ What is the balance for tenant [name]?
 Create a work order for the leaking roof at 123 Main St, high priority.
 Upload this invoice and attach it to work order #1042.
 Show me all unpaid bills.
+Which vendors have liability insurance expiring in the next 60 days?
+Find vendors within 25 miles of property [ID].
+Show me all photos attached to work order [ID].
+Download the inspection report file [ID].
 ```
 
 ---

@@ -1,4 +1,5 @@
 import * as client from "./client.js";
+import zipcodes from "zipcodes";
 
 const LEASE_STATUS: Record<string, string> = {
   "1": "future",
@@ -354,22 +355,230 @@ export async function listOwners() {
   });
 }
 
+// Map a raw Rentvine vendor contact record into a snake_case object that
+// surfaces every field the /vendors/search endpoint returns. Kept as a helper
+// so vendorsNear can reuse the same projection.
+function projectVendor(c: Row) {
+  return {
+    contact_id: c.contactID,
+    contact_type_id: c.contactTypeID,
+    vendor_type_id: c.vendorTypeID,
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    address: c.address,
+    address2: c.address2,
+    city: c.city,
+    state: c.stateID,
+    postal_code: c.postalCode,
+    country: c.countryID,
+    birth_date: c.birthDate,
+    // Billing / payout
+    default_bill_charge_account_id: c.defaultBillChargeAccountID,
+    payee_name: c.payeeName,
+    tax_payer_name: c.taxPayerName,
+    tax_form_type_id: c.taxFormTypeID,
+    payout_type_id: c.payoutTypeID,
+    ach_details_ciphertext_id: c.achDetailsCiphertextID,
+    ach_account_number_truncated: c.achAccountNumberTruncated,
+    ach_account_type_id: c.achAccountTypeID,
+    hold_payments: c.holdPayments,
+    is_billing_sales_tax_enabled: c.isBillingSalesTaxEnabled,
+    invoice_autofill_template_id: c.invoiceAutofillTemplateID,
+    // Liability insurance
+    liability_insurance_name: c.liabilityInsuranceName,
+    liability_insurance_policy_number: c.liabilityInsurancePolicyNumber,
+    liability_insurance_expiration: c.liabilityInsuranceExpiresDate,
+    days_until_liability_insurance_expires: c.daysUntilLiabilityInsuranceExpires,
+    // Workers comp
+    workers_comp_insurance_name: c.workersCompInsuranceName,
+    workers_comp_insurance_policy_number: c.workersCompInsurancePolicyNumber,
+    workers_comp_insurance_expiration: c.workersCompInsuranceExpiresDate,
+    days_until_workers_comp_insurance_expires: c.daysUntilWorkersCompInsuranceExpires,
+    // Combined insurance
+    insurance_expiration: c.insuranceExpiresDate,
+    days_until_insurance_expires: c.daysUntilInsuranceExpires,
+    is_insurance_required_for_payment: c.isInsuranceRequiredForPayment,
+    // Discounts
+    discount_percent: c.discountPercent,
+    discount_grace_days: c.discountGraceDays,
+    // ID docs
+    identification_type_id: c.identificationTypeID,
+    identification_number: c.identificationNumber,
+    identification_issuing_location: c.identificationIssuingLocation,
+    identification_expiration_date: c.identificationExpirationDate,
+    identification_country_id: c.identificationCountryID,
+    has_tax_identifier: c.hasTaxIdentifier,
+    // Status / audit
+    is_active: c.isActive,
+    date_time_created: c.dateTimeCreated,
+    date_time_modified: c.dateTimeModified,
+    date_time_deactivated: c.dateTimeDeactivated,
+    // Stats
+    property_count: c.propertyCount,
+  };
+}
+
 export async function listVendors() {
   const rows = await client.fetchVendors();
-  return rows.map((row) => {
-    const c = asObj(row.contact ?? row);
+  return rows.map((row) => projectVendor(asObj(row.contact ?? row)));
+}
+
+// Detail projection — superset of projectVendor with the ~20 extra fields that
+// only appear on /vendors/{id} (not /vendors/search). Parses the packed `code`
+// field into a `code_metadata` object using the pipe-delimited k=v convention
+// our FL import script uses (id=, t=, hr=, eh=, min=, tr=, r=, em=, pr=, p=).
+function parseCodeMetadata(code: unknown): Record<string, string> | null {
+  const s = code == null ? "" : String(code);
+  if (!s || !s.includes("=")) return null;
+  const out: Record<string, string> = {};
+  for (const part of s.split("|")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    out[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function projectVendorDetail(c: Row) {
+  const base = projectVendor(c);
+  const code = c.code ?? null;
+  return {
+    ...base,
+    // Detail-endpoint-only identity fields
+    code,
+    code_metadata: parseCodeMetadata(code),
+    first_name: c.firstName,
+    middle_name: c.middleName,
+    last_name: c.lastName,
+    suffix: c.suffix,
+    // Detail-only billing / payout
+    other_payout_type_id: c.otherPayoutTypeID,
+    ach_is_corporate_account: c.achIsCorporateAccount,
+    // Detail-only discount tiers
+    discount_amount: c.discountAmount,
+    discount_amount_min: c.discountAmountMin,
+    discount_amount_max: c.discountAmountMax,
+    // Detail-only flags
+    max_line_items_on_payment: c.maxLineItemsOnPayment,
+    prevent_consolidated_payments: c.preventConsolidatedPayments,
+    is_from_import: c.isFromImport,
+    import_source_key: c.importSourceKey,
+    website_url: c.websiteUrl,
+    applicant_id: c.applicantID,
+    owner_portal_name_override: c.ownerPortalNameOverride,
+    is_bill_approval_exempt: c.isBillApprovalExempt,
+    // QuickBooks linkage
+    is_quickbooks_export_enabled: c.isQuickbooksExportEnabled,
+    quickbooks_customer_name: c.quickbooksCustomerName,
+    // Contact type label (only on detail response)
+    contact_type: c.contactType,
+  };
+}
+
+export async function getVendor(vendorId: string) {
+  if (!vendorId) return { error: "vendor_id is required." };
+  const response = await client.fetchVendor(vendorId);
+  const contact = asObj((response as Row)?.contact ?? (response as Row));
+  if (!contact.contactID) {
+    return { error: `Vendor ${vendorId} not found.` };
+  }
+  return projectVendorDetail(contact);
+}
+
+// Haversine distance in miles between two lat/lon points.
+function haversineMiles(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 3958.7613; // Earth radius in miles
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+export interface VendorsNearInput {
+  property_id: string;
+  radius_mi?: number;
+  active_only?: boolean;
+}
+
+export async function vendorsNear(input: VendorsNearInput) {
+  if (!input.property_id) return { error: "property_id is required." };
+  const radiusMi = input.radius_mi ?? 25;
+  const activeOnly = input.active_only ?? true;
+
+  const propertyResponse = await client.fetchProperty(input.property_id);
+  const property = asObj(
+    (propertyResponse as Row)?.property ?? (propertyResponse as Row)
+  );
+  const pLat = Number(property.latitude);
+  const pLon = Number(property.longitude);
+  if (!Number.isFinite(pLat) || !Number.isFinite(pLon)) {
     return {
-      contact_id: c.contactID,
-      name: c.name,
-      email: c.email,
-      phone: c.phone,
-      address: c.address,
-      city: c.city,
-      state: c.state,
-      postal_code: c.postalCode,
-      insurance_expiration: c.insuranceExpiration ?? c.insuranceExpirationDate,
+      error: `Property ${input.property_id} has no geocoded latitude/longitude in Rentvine. Cannot compute vendor distances.`,
     };
-  });
+  }
+
+  const rows = await client.fetchVendors();
+  const vendors = rows.map((row) => asObj(row.contact ?? row));
+
+  type Matched = ReturnType<typeof projectVendor> & {
+    distance_miles: number;
+    vendor_latitude: number;
+    vendor_longitude: number;
+    vendor_zip_resolved: string | null;
+  };
+  const matched: Matched[] = [];
+  const skipped: { name: string; reason: string }[] = [];
+
+  for (const c of vendors) {
+    if (activeOnly && s(c.isActive) !== "1") continue;
+    const zip = s(c.postalCode).slice(0, 5);
+    if (!zip) {
+      skipped.push({ name: s(c.name), reason: "missing postal_code" });
+      continue;
+    }
+    const zipInfo = zipcodes.lookup(zip);
+    if (!zipInfo || typeof zipInfo.latitude !== "number") {
+      skipped.push({ name: s(c.name), reason: `zip ${zip} not in lookup table` });
+      continue;
+    }
+    const dist = haversineMiles(pLat, pLon, zipInfo.latitude, zipInfo.longitude);
+    if (dist > radiusMi) continue;
+    matched.push({
+      ...projectVendor(c),
+      distance_miles: Math.round(dist * 10) / 10,
+      vendor_latitude: zipInfo.latitude,
+      vendor_longitude: zipInfo.longitude,
+      vendor_zip_resolved: zip,
+    });
+  }
+
+  matched.sort((a, b) => a.distance_miles - b.distance_miles);
+
+  return {
+    property_id: input.property_id,
+    property_address: property.address,
+    property_city: property.city,
+    property_state: property.stateID,
+    property_postal_code: property.postalCode,
+    property_latitude: pLat,
+    property_longitude: pLon,
+    radius_mi: radiusMi,
+    active_only: activeOnly,
+    match_count: matched.length,
+    vendors: matched,
+    skipped,
+    note:
+      "Vendor locations are approximated from ZIP-code centroids (offline lookup). Rentvine does not store per-vendor lat/lon. Use this as a coarse geographic filter, not a precise distance.",
+  };
 }
 
 export async function listPortfolios() {
@@ -516,6 +725,84 @@ export interface FileUploadInput {
   object_id?: number;
 }
 
+export interface AttachmentListInput {
+  object_id: number;
+  object_type_id: number;
+}
+
+export interface WorkOrderAttachmentsInput {
+  work_order_id?: number;
+}
+
+export interface FileRefInput {
+  file_id?: number | string;
+}
+
+function mapAttachmentRow(row: unknown) {
+  const r = asObj(row as Record<string, unknown>);
+  const file = asObj(r.file ?? r);
+  const attachment = asObj(r.attachment ?? {});
+  return {
+    file_id: file.fileID,
+    file_name: file.fileName,
+    file_size: file.fileSize,
+    file_type: file.fileType,
+    mime_type: file.mimeType ?? file.contentType,
+    uploaded_at: file.dateCreated ?? file.createdAt,
+    object_id: attachment.objectID ?? r.objectID,
+    object_type_id: attachment.objectTypeID ?? r.objectTypeID,
+    attachment_id: attachment.fileAttachmentID ?? null,
+    url: file.url ?? file.downloadURL ?? null,
+  };
+}
+
+export async function listAttachments(input: AttachmentListInput) {
+  if (input.object_id === undefined || input.object_type_id === undefined) {
+    return {
+      error:
+        "object_id and object_type_id are required. Use list_object_types for valid object_type_id values (e.g. 16 = Work Order).",
+    };
+  }
+  const rows = await client.fetchFiles(input.object_id, input.object_type_id);
+  return rows.map(mapAttachmentRow);
+}
+
+export async function listWorkOrderAttachments(input: WorkOrderAttachmentsInput) {
+  if (!input.work_order_id) return { error: "work_order_id is required." };
+  const rows = await client.fetchFiles(input.work_order_id, 16);
+  return rows.map(mapAttachmentRow);
+}
+
+export async function getFile(input: FileRefInput) {
+  if (!input.file_id) return { error: "file_id is required." };
+  const response = await client.fetchFile(input.file_id);
+  const raw = Array.isArray(response)
+    ? ((response as unknown[])[0] ?? {})
+    : ((response as Record<string, unknown>)?.data ?? response);
+  return mapAttachmentRow(asObj(raw as Record<string, unknown>));
+}
+
+export async function downloadFile(input: FileRefInput) {
+  if (!input.file_id) return { error: "file_id is required." };
+  const { contentType, buffer } = await client.downloadFileBinary(input.file_id);
+  const MAX_BYTES = 1_000_000; // ~1MB raw
+  if (buffer.length > MAX_BYTES) {
+    return {
+      error: `File is ~${Math.round(buffer.length / 1024)}KB — too large to return as base64 (limit ~1MB). Use the url field from get_file to access it directly, or ask Rentvine support for a direct download link.`,
+      mime_type: contentType,
+      size_bytes: buffer.length,
+    };
+  }
+  const isImage = contentType.startsWith("image/");
+  return {
+    file_id: input.file_id,
+    mime_type: contentType,
+    size_bytes: buffer.length,
+    is_image: isImage,
+    content_base64: buffer.toString("base64"),
+  };
+}
+
 export async function listObjectTypes() {
   return [
     { object_type_id: 1,  name: "Account" },
@@ -582,11 +869,11 @@ export async function uploadFile(input: FileUploadInput) {
     buffer = Buffer.from(await fs.readFile(input.file_path));
     fileName = input.file_name ?? path.basename(input.file_path);
   } else if (input.file_content_base64 && input.file_name) {
-    const BASE64_LIMIT = 500_000;
+    const BASE64_LIMIT = 2_666_667; // ~2MB raw (base64 inflates by ~33%)
     if (input.file_content_base64.length > BASE64_LIMIT) {
       const rawKB = Math.round(input.file_content_base64.length * 0.75 / 1024);
       throw new Error(
-        `File is ~${rawKB}KB — too large to pass as base64 (limit ~375KB raw). ` +
+        `File is ~${rawKB}KB — too large to pass as base64 (limit ~2MB raw). ` +
         `Use file_path instead: upload_file(file_path="/absolute/path/to/file", ...)`
       );
     }

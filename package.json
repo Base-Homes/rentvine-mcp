@@ -1,6 +1,6 @@
 {
   "name": "rentvine-mcp",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "MCP server for Rentvine property management — works with Claude Desktop, Claude Code, Cursor, and any MCP client",
   "type": "module",
   "bin": {
@@ -39,6 +39,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "express": "^4.21.0",
+    "zipcodes": "^8.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
