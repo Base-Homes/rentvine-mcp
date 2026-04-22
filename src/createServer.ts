@@ -567,7 +567,7 @@ export function createServer(): McpServer {
     "download_file",
     {
       description:
-        "Download a Rentvine file as base64 (live data, read). Returns mime_type, size_bytes, is_image, and content_base64. Supports images and other binary attachments. Large files may blow up the context window — prefer list_attachments first to check file_size.",
+        "Download a Rentvine file as base64 (live data, read). Returns mime_type, size_bytes, is_image, and content_base64. Supports images and other binary attachments up to ~1MB. Large files may fill the context window — prefer list_attachments first to check file_size.",
       inputSchema: {
         file_id: z.union([z.number(), z.string()]).describe("Rentvine fileID."),
       },

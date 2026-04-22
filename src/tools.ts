@@ -785,10 +785,10 @@ export async function getFile(input: FileRefInput) {
 export async function downloadFile(input: FileRefInput) {
   if (!input.file_id) return { error: "file_id is required." };
   const { contentType, buffer } = await client.downloadFileBinary(input.file_id);
-  const MAX_BYTES = 400_000; // ~375KB raw — matches upload_file limit
+  const MAX_BYTES = 1_000_000; // ~1MB raw
   if (buffer.length > MAX_BYTES) {
     return {
-      error: `File is ~${Math.round(buffer.length / 1024)}KB — too large to return as base64 (limit ~375KB). Use the url field from get_file to access it directly, or ask Rentvine support for a direct download link.`,
+      error: `File is ~${Math.round(buffer.length / 1024)}KB — too large to return as base64 (limit ~1MB). Use the url field from get_file to access it directly, or ask Rentvine support for a direct download link.`,
       mime_type: contentType,
       size_bytes: buffer.length,
     };
@@ -869,11 +869,11 @@ export async function uploadFile(input: FileUploadInput) {
     buffer = Buffer.from(await fs.readFile(input.file_path));
     fileName = input.file_name ?? path.basename(input.file_path);
   } else if (input.file_content_base64 && input.file_name) {
-    const BASE64_LIMIT = 500_000;
+    const BASE64_LIMIT = 2_666_667; // ~2MB raw (base64 inflates by ~33%)
     if (input.file_content_base64.length > BASE64_LIMIT) {
       const rawKB = Math.round(input.file_content_base64.length * 0.75 / 1024);
       throw new Error(
-        `File is ~${rawKB}KB — too large to pass as base64 (limit ~375KB raw). ` +
+        `File is ~${rawKB}KB — too large to pass as base64 (limit ~2MB raw). ` +
         `Use file_path instead: upload_file(file_path="/absolute/path/to/file", ...)`
       );
     }
