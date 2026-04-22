@@ -1,4 +1,5 @@
 import * as client from "./client.js";
+import zipcodes from "zipcodes";
 
 const LEASE_STATUS: Record<string, string> = {
   "1": "future",
@@ -354,22 +355,168 @@ export async function listOwners() {
   });
 }
 
+// Map a raw Rentvine vendor contact record into a snake_case object that
+// surfaces every field the /vendors/search endpoint returns. Kept as a helper
+// so vendorsNear can reuse the same projection.
+function projectVendor(c: Row) {
+  return {
+    contact_id: c.contactID,
+    contact_type_id: c.contactTypeID,
+    vendor_type_id: c.vendorTypeID,
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    address: c.address,
+    address2: c.address2,
+    city: c.city,
+    state: c.stateID,
+    postal_code: c.postalCode,
+    country: c.countryID,
+    birth_date: c.birthDate,
+    // Billing / payout
+    default_bill_charge_account_id: c.defaultBillChargeAccountID,
+    payee_name: c.payeeName,
+    tax_payer_name: c.taxPayerName,
+    tax_form_type_id: c.taxFormTypeID,
+    payout_type_id: c.payoutTypeID,
+    ach_details_ciphertext_id: c.achDetailsCiphertextID,
+    ach_account_number_truncated: c.achAccountNumberTruncated,
+    ach_account_type_id: c.achAccountTypeID,
+    hold_payments: c.holdPayments,
+    is_billing_sales_tax_enabled: c.isBillingSalesTaxEnabled,
+    invoice_autofill_template_id: c.invoiceAutofillTemplateID,
+    // Liability insurance
+    liability_insurance_name: c.liabilityInsuranceName,
+    liability_insurance_policy_number: c.liabilityInsurancePolicyNumber,
+    liability_insurance_expiration: c.liabilityInsuranceExpiresDate,
+    days_until_liability_insurance_expires: c.daysUntilLiabilityInsuranceExpires,
+    // Workers comp
+    workers_comp_insurance_name: c.workersCompInsuranceName,
+    workers_comp_insurance_policy_number: c.workersCompInsurancePolicyNumber,
+    workers_comp_insurance_expiration: c.workersCompInsuranceExpiresDate,
+    days_until_workers_comp_insurance_expires: c.daysUntilWorkersCompInsuranceExpires,
+    // Combined insurance
+    insurance_expiration: c.insuranceExpiresDate,
+    days_until_insurance_expires: c.daysUntilInsuranceExpires,
+    is_insurance_required_for_payment: c.isInsuranceRequiredForPayment,
+    // Discounts
+    discount_percent: c.discountPercent,
+    discount_grace_days: c.discountGraceDays,
+    // ID docs
+    identification_type_id: c.identificationTypeID,
+    identification_number: c.identificationNumber,
+    identification_issuing_location: c.identificationIssuingLocation,
+    identification_expiration_date: c.identificationExpirationDate,
+    identification_country_id: c.identificationCountryID,
+    has_tax_identifier: c.hasTaxIdentifier,
+    // Status / audit
+    is_active: c.isActive,
+    date_time_created: c.dateTimeCreated,
+    date_time_modified: c.dateTimeModified,
+    date_time_deactivated: c.dateTimeDeactivated,
+    // Stats
+    property_count: c.propertyCount,
+  };
+}
+
 export async function listVendors() {
   const rows = await client.fetchVendors();
-  return rows.map((row) => {
-    const c = asObj(row.contact ?? row);
+  return rows.map((row) => projectVendor(asObj(row.contact ?? row)));
+}
+
+// Haversine distance in miles between two lat/lon points.
+function haversineMiles(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 3958.7613; // Earth radius in miles
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+export interface VendorsNearInput {
+  property_id: string;
+  radius_mi?: number;
+  active_only?: boolean;
+}
+
+export async function vendorsNear(input: VendorsNearInput) {
+  if (!input.property_id) return { error: "property_id is required." };
+  const radiusMi = input.radius_mi ?? 25;
+  const activeOnly = input.active_only ?? true;
+
+  const propertyResponse = await client.fetchProperty(input.property_id);
+  const property = asObj(
+    (propertyResponse as Row)?.property ?? (propertyResponse as Row)
+  );
+  const pLat = Number(property.latitude);
+  const pLon = Number(property.longitude);
+  if (!Number.isFinite(pLat) || !Number.isFinite(pLon)) {
     return {
-      contact_id: c.contactID,
-      name: c.name,
-      email: c.email,
-      phone: c.phone,
-      address: c.address,
-      city: c.city,
-      state: c.state,
-      postal_code: c.postalCode,
-      insurance_expiration: c.insuranceExpiration ?? c.insuranceExpirationDate,
+      error: `Property ${input.property_id} has no geocoded latitude/longitude in Rentvine. Cannot compute vendor distances.`,
     };
-  });
+  }
+
+  const rows = await client.fetchVendors();
+  const vendors = rows.map((row) => asObj(row.contact ?? row));
+
+  type Matched = ReturnType<typeof projectVendor> & {
+    distance_miles: number;
+    vendor_latitude: number;
+    vendor_longitude: number;
+    vendor_zip_resolved: string | null;
+  };
+  const matched: Matched[] = [];
+  const skipped: { name: string; reason: string }[] = [];
+
+  for (const c of vendors) {
+    if (activeOnly && s(c.isActive) !== "1") continue;
+    const zip = s(c.postalCode).slice(0, 5);
+    if (!zip) {
+      skipped.push({ name: s(c.name), reason: "missing postal_code" });
+      continue;
+    }
+    const zipInfo = zipcodes.lookup(zip);
+    if (!zipInfo || typeof zipInfo.latitude !== "number") {
+      skipped.push({ name: s(c.name), reason: `zip ${zip} not in lookup table` });
+      continue;
+    }
+    const dist = haversineMiles(pLat, pLon, zipInfo.latitude, zipInfo.longitude);
+    if (dist > radiusMi) continue;
+    matched.push({
+      ...projectVendor(c),
+      distance_miles: Math.round(dist * 10) / 10,
+      vendor_latitude: zipInfo.latitude,
+      vendor_longitude: zipInfo.longitude,
+      vendor_zip_resolved: zip,
+    });
+  }
+
+  matched.sort((a, b) => a.distance_miles - b.distance_miles);
+
+  return {
+    property_id: input.property_id,
+    property_address: property.address,
+    property_city: property.city,
+    property_state: property.stateID,
+    property_postal_code: property.postalCode,
+    property_latitude: pLat,
+    property_longitude: pLon,
+    radius_mi: radiusMi,
+    active_only: activeOnly,
+    match_count: matched.length,
+    vendors: matched,
+    skipped,
+    note:
+      "Vendor locations are approximated from ZIP-code centroids (offline lookup). Rentvine does not store per-vendor lat/lon. Use this as a coarse geographic filter, not a precise distance.",
+  };
 }
 
 export async function listPortfolios() {

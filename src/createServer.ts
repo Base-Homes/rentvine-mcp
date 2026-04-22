@@ -235,7 +235,7 @@ function jsonResult(data: unknown) {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "rentvine",
-    version: "0.1.3",
+    version: "1.1.0",
   });
 
   server.registerTool(
@@ -395,10 +395,25 @@ export function createServer(): McpServer {
     "list_vendors",
     {
       description:
-        "List all vendors from Rentvine (live data). Returns vendor name, contact ID, email, phone, and insurance expiration. Use this to find vendors for work order assignment or bill creation.",
+        "List all vendors from Rentvine (live data). Returns every field the /vendors/search endpoint exposes — contact details (name, email, phone, address, city, state, postal_code, country), billing/payout (tax_payer_name, payout_type_id, ach_account_number_truncated, hold_payments), full insurance coverage (liability and workers-comp policy numbers + expirations, days_until_insurance_expires), discount terms, identification documents, active status, and audit timestamps. Use to find vendors for work-order assignment, bill creation, or compliance review. Note: Rentvine does not expose trade categories or service areas via the public API.",
       inputSchema: {},
     },
     async () => jsonResult(await tools.listVendors())
+  );
+
+  server.registerTool(
+    "vendors_near",
+    {
+      description:
+        "Find vendors within a radius of a property (live data). Uses the property's Rentvine-geocoded latitude/longitude as the center and approximates each vendor's location from their ZIP-code centroid (offline US lookup — Rentvine does not store per-vendor lat/lon). Returns vendors sorted by distance ascending, each annotated with distance_miles. Defaults: radius_mi=25, active_only=true. Coarse filter — not a precise distance.",
+      inputSchema: {
+        property_id: z.string().describe("Rentvine property ID (from list_properties). Must have a geocoded latitude/longitude in Rentvine."),
+        radius_mi: z.number().optional().describe("Search radius in miles. Defaults to 25."),
+        active_only: z.boolean().optional().describe("If true (default), only returns vendors with isActive=1."),
+      },
+    },
+    async ({ property_id, radius_mi, active_only }) =>
+      jsonResult(await tools.vendorsNear({ property_id, radius_mi, active_only }))
   );
 
   server.registerTool(

@@ -73,6 +73,10 @@ export async function fetchProperties() {
   return unwrap(await get("/properties"));
 }
 
+export async function fetchProperty(propertyId: string): Promise<unknown> {
+  return await get(`/properties/${propertyId}`);
+}
+
 export async function fetchTenants() {
   return unwrap(await get("/tenants"));
 }
