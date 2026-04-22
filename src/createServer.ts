@@ -499,6 +499,55 @@ export function createServer(): McpServer {
     async () => jsonResult(await tools.listObjectTypes())
   );
 
+  server.registerTool(
+    "list_attachments",
+    {
+      description:
+        "List files attached to any Rentvine object (live data, read). Returns file metadata including file_id, file_name, mime_type, size, and upload date. Use list_object_types to find the correct object_type_id.",
+      inputSchema: {
+        object_id: z.number().describe("ID of the Rentvine object (e.g. workOrderID, propertyID, leaseID, unitID)."),
+        object_type_id: z.number().describe("Rentvine object type ID (e.g. 16 = Work Order, 6 = Property, 4 = Lease, 7 = Unit). Use list_object_types for the full table."),
+      },
+    },
+    async (args) => jsonResult(await tools.listAttachments(args))
+  );
+
+  server.registerTool(
+    "list_work_order_attachments",
+    {
+      description:
+        "List images and files attached to a specific work order (live data, read). Convenience wrapper around list_attachments with object_type_id fixed to 16.",
+      inputSchema: {
+        work_order_id: z.number().describe("Rentvine workOrderID."),
+      },
+    },
+    async (args) => jsonResult(await tools.listWorkOrderAttachments(args))
+  );
+
+  server.registerTool(
+    "get_file",
+    {
+      description:
+        "Get metadata for a single Rentvine file by file_id (live data, read). Returns name, size, mime type, and attachment info — but not file contents. Use download_file to fetch the actual bytes.",
+      inputSchema: {
+        file_id: z.union([z.number(), z.string()]).describe("Rentvine fileID."),
+      },
+    },
+    async (args) => jsonResult(await tools.getFile(args))
+  );
+
+  server.registerTool(
+    "download_file",
+    {
+      description:
+        "Download a Rentvine file as base64 (live data, read). Returns mime_type, size_bytes, is_image, and content_base64. Supports images and other binary attachments. Large files may blow up the context window — prefer list_attachments first to check file_size.",
+      inputSchema: {
+        file_id: z.union([z.number(), z.string()]).describe("Rentvine fileID."),
+      },
+    },
+    async (args) => jsonResult(await tools.downloadFile(args))
+  );
+
   server.registerResource(
     "rentvine-api-docs",
     "rentvine://api-docs",

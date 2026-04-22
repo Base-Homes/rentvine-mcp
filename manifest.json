@@ -73,6 +73,22 @@
     {
       "name": "get_tenant_balance",
       "description": "Ledger balance for a named tenant"
+    },
+    {
+      "name": "list_attachments",
+      "description": "Files attached to any Rentvine object"
+    },
+    {
+      "name": "list_work_order_attachments",
+      "description": "Images and files attached to a work order"
+    },
+    {
+      "name": "get_file",
+      "description": "Metadata for a single Rentvine file"
+    },
+    {
+      "name": "download_file",
+      "description": "Download a Rentvine file as base64 (supports images)"
     }
   ],
   "keywords": [

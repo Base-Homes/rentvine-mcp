@@ -133,6 +133,43 @@ export async function fetchObjectTypes() {
   return unwrap(await get("/object-types"));
 }
 
+export async function fetchFiles(objectId?: number, objectTypeId?: number) {
+  const params: Record<string, string> = { includes: "attachment" };
+  if (objectId !== undefined) params.objectID = String(objectId);
+  if (objectTypeId !== undefined) params.objectTypeID = String(objectTypeId);
+  return unwrap(await get("/files", params));
+}
+
+export async function fetchFile(fileId: string | number): Promise<unknown> {
+  return await get(`/files/${fileId}`, { includes: "attachment" });
+}
+
+export async function downloadFileBinary(
+  fileId: string | number
+): Promise<{ contentType: string; buffer: Buffer }> {
+  const { baseUrl, headers } = getClientArgs();
+  const url = new URL(`${baseUrl}/files/${fileId}/download`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: headers.Authorization },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      throw new Error(`Rentvine ${resp.status} ${resp.statusText}: ${body.slice(0, 200)}`);
+    }
+    const contentType = resp.headers.get("content-type") ?? "application/octet-stream";
+    const arrayBuffer = await resp.arrayBuffer();
+    return { contentType, buffer: Buffer.from(arrayBuffer) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function uploadFile(
   fileContent: Buffer,
   fileName: string,

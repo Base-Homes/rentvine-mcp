@@ -516,6 +516,74 @@ export interface FileUploadInput {
   object_id?: number;
 }
 
+export interface AttachmentListInput {
+  object_id?: number;
+  object_type_id?: number;
+}
+
+export interface WorkOrderAttachmentsInput {
+  work_order_id?: number;
+}
+
+export interface FileRefInput {
+  file_id?: number | string;
+}
+
+function mapAttachmentRow(row: unknown) {
+  const r = asObj(row as Record<string, unknown>);
+  const file = asObj(r.file ?? r);
+  const attachment = asObj(r.attachment ?? {});
+  return {
+    file_id: file.fileID,
+    file_name: file.fileName,
+    file_size: file.fileSize,
+    file_type: file.fileType,
+    mime_type: file.mimeType ?? file.contentType,
+    uploaded_at: file.dateCreated ?? file.createdAt,
+    object_id: attachment.objectID ?? r.objectID,
+    object_type_id: attachment.objectTypeID ?? r.objectTypeID,
+    attachment_id: attachment.fileAttachmentID ?? null,
+    url: file.url ?? file.downloadURL ?? null,
+  };
+}
+
+export async function listAttachments(input: AttachmentListInput) {
+  if (input.object_id === undefined || input.object_type_id === undefined) {
+    return {
+      error:
+        "object_id and object_type_id are required. Use list_object_types for valid object_type_id values (e.g. 16 = Work Order).",
+    };
+  }
+  const rows = await client.fetchFiles(input.object_id, input.object_type_id);
+  return rows.map(mapAttachmentRow);
+}
+
+export async function listWorkOrderAttachments(input: WorkOrderAttachmentsInput) {
+  if (!input.work_order_id) return { error: "work_order_id is required." };
+  const rows = await client.fetchFiles(input.work_order_id, 16);
+  return rows.map(mapAttachmentRow);
+}
+
+export async function getFile(input: FileRefInput) {
+  if (!input.file_id) return { error: "file_id is required." };
+  const response = await client.fetchFile(input.file_id);
+  const r = asObj((response as Record<string, unknown>)?.data ?? response);
+  return mapAttachmentRow(r);
+}
+
+export async function downloadFile(input: FileRefInput) {
+  if (!input.file_id) return { error: "file_id is required." };
+  const { contentType, buffer } = await client.downloadFileBinary(input.file_id);
+  const isImage = contentType.startsWith("image/");
+  return {
+    file_id: input.file_id,
+    mime_type: contentType,
+    size_bytes: buffer.length,
+    is_image: isImage,
+    content_base64: buffer.toString("base64"),
+  };
+}
+
 export async function listObjectTypes() {
   return [
     { object_type_id: 1,  name: "Account" },
