@@ -726,8 +726,8 @@ export interface FileUploadInput {
 }
 
 export interface AttachmentListInput {
-  object_id?: number;
-  object_type_id?: number;
+  object_id: number;
+  object_type_id: number;
 }
 
 export interface WorkOrderAttachmentsInput {
@@ -776,13 +776,23 @@ export async function listWorkOrderAttachments(input: WorkOrderAttachmentsInput)
 export async function getFile(input: FileRefInput) {
   if (!input.file_id) return { error: "file_id is required." };
   const response = await client.fetchFile(input.file_id);
-  const r = asObj((response as Record<string, unknown>)?.data ?? response);
-  return mapAttachmentRow(r);
+  const raw = Array.isArray(response)
+    ? ((response as unknown[])[0] ?? {})
+    : ((response as Record<string, unknown>)?.data ?? response);
+  return mapAttachmentRow(asObj(raw as Record<string, unknown>));
 }
 
 export async function downloadFile(input: FileRefInput) {
   if (!input.file_id) return { error: "file_id is required." };
   const { contentType, buffer } = await client.downloadFileBinary(input.file_id);
+  const MAX_BYTES = 400_000; // ~375KB raw — matches upload_file limit
+  if (buffer.length > MAX_BYTES) {
+    return {
+      error: `File is ~${Math.round(buffer.length / 1024)}KB — too large to return as base64 (limit ~375KB). Use the url field from get_file to access it directly, or ask Rentvine support for a direct download link.`,
+      mime_type: contentType,
+      size_bytes: buffer.length,
+    };
+  }
   const isImage = contentType.startsWith("image/");
   return {
     file_id: input.file_id,

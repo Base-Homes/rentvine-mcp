@@ -395,7 +395,7 @@ export function createServer(): McpServer {
     "list_vendors",
     {
       description:
-        "List all vendors from Rentvine (live data). Returns every field the /vendors/search endpoint exposes — contact details (name, email, phone, address, city, state, postal_code, country), billing/payout (tax_payer_name, payout_type_id, ach_account_number_truncated, hold_payments), full insurance coverage (liability and workers-comp policy numbers + expirations, days_until_insurance_expires), discount terms, identification documents, active status, and audit timestamps. Use to find vendors for work-order assignment, bill creation, or compliance review. Note: Rentvine does not expose trade categories or service areas via the public API.",
+        "List all vendors from Rentvine (live data). Returns every field the /vendors/search endpoint exposes — contact details (name, email, phone, address, city, state, postal_code, country), billing/payout (tax_payer_name, payout_type_id, ach_account_number_truncated, hold_payments), full insurance coverage (liability and workers-comp policy numbers + expirations, days_until_insurance_expires), discount terms, identification documents, active status, and audit timestamps. Use to find vendors for work-order assignment, bill creation, or compliance review. Note: Rentvine does not expose trade categories or service areas via the public API. SENSITIVE: response includes PII and financial fields (birth_date, identification_number, ACH details) — treat output as confidential.",
       inputSchema: {},
     },
     async () => jsonResult(await tools.listVendors())
