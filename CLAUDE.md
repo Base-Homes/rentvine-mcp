@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An MCP server that exposes Rentvine property management data (properties, leases, units, work orders, applications, inspections, tenant balances) as tools for Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, and any other MCP client. TypeScript, published as `rentvine-mcp` on npm and as a `.dxt` extension for Claude Desktop.
+An MCP server that exposes Rentvine property management data (properties, leases, units, work orders, applications, inspections, tenant balances, vendors, and file attachments) as tools for Claude Desktop, Claude Code, Cursor, Windsurf, VS Code, and any other MCP client. TypeScript, published as `rentvine-mcp` on npm and as a `.dxt` extension for Claude Desktop.
 
 ## Architecture
 
@@ -12,15 +12,21 @@ Layers under `src/`:
 
 - `client.ts` — raw HTTP against the Rentvine `/api/manager` endpoints, Basic auth from `RENTVINE_API_KEY` / `RENTVINE_API_SECRET` / `RENTVINE_COMPANY` env vars
 - `tools.ts` — domain-level formatting (envelope unwrapping, status-ID translation, HTML stripping for descriptions). One function per MCP tool.
-- `createServer.ts` — builds the `McpServer` instance and registers all 7 tools. Shared by both entrypoints.
+- `createServer.ts` — builds the `McpServer` instance and registers all tools. Shared by both entrypoints.
 - `index.ts` — stdio entrypoint. This is what Claude Desktop / Claude Code / Cursor / etc. spawn as a subprocess.
 - `http.ts` — Streamable HTTP entrypoint for ChatGPT Developer Mode and other remote MCP clients. Express server with bearer-token auth, session management via `mcp-session-id` header. Requires `MCP_AUTH_TOKEN` env var when exposed publicly.
 
 Both entrypoints go through `createServer()` — if you add/change a tool, it shows up everywhere.
 
+## Key pattern: vendors_near geography
+
+`vendors_near` bridges a Rentvine API gap: properties have `latitude`/`longitude` but vendors don't. The tool approximates vendor location from their US ZIP code using the `zipcodes` npm package (offline, ~5 MB data file bundled in the DXT). Distance is computed with the Haversine formula. Results are coarse (ZIP-centroid, ±2–5 mi) and the tool says so explicitly in its `note` field.
+
 ## Key pattern: Rentvine envelope unwrapping
 
-Rentvine's API inconsistently wraps entities in envelope objects — e.g. a properties response can be `[{property: {...}}, ...]` or `[{...}, ...]`. Every tool handler uses a `row.property ?? row` pattern to handle both. Same applies for `unit`, `contact`, `lease`, `workOrder` envelopes. When adding a new tool, match this — don't assume the API returns bare objects.
+Rentvine's API inconsistently wraps entities in envelope objects — e.g. a properties response can be `[{property: {...}}, ...]` or `[{...}, ...]`. Every tool handler uses a `row.property ?? row` pattern to handle both. Same applies for `unit`, `contact`, `lease`, `workOrder`, `file`/`attachment` envelopes. When adding a new tool, match this — don't assume the API returns bare objects.
+
+`download_file` enforces a 375 KB hard limit (matching `upload_file`'s `BASE64_LIMIT`). Files over the limit return an error with `size_bytes` so the caller can decide what to do. Don't remove this guard — large files destroy context windows.
 
 ## Common commands
 
