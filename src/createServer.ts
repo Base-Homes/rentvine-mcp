@@ -235,7 +235,7 @@ function jsonResult(data: unknown) {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "rentvine",
-    version: "1.1.0",
+    version: "1.2.0",
   });
 
   server.registerTool(
@@ -399,6 +399,18 @@ export function createServer(): McpServer {
       inputSchema: {},
     },
     async () => jsonResult(await tools.listVendors())
+  );
+
+  server.registerTool(
+    "get_vendor",
+    {
+      description:
+        "Get a single vendor's full details from Rentvine (live data). Calls /vendors/{id} which returns ~20 fields not available via list_vendors — notably `code` (100-char free-text identifier used as a catch-all for metadata Rentvine's schema can't hold, such as trade/hourly-rate), `website_url`, name components (first/middle/last/suffix), discount tiers, QuickBooks linkage, and `contact_type`. Also parses the packed `code` field into a `code_metadata` object when it uses the pipe-delimited k=v convention.",
+      inputSchema: {
+        vendor_id: z.string().describe("Rentvine vendor contactID (from list_vendors or vendors_near)."),
+      },
+    },
+    async ({ vendor_id }) => jsonResult(await tools.getVendor(vendor_id))
   );
 
   server.registerTool(

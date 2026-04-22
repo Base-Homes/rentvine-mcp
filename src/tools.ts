@@ -424,6 +424,68 @@ export async function listVendors() {
   return rows.map((row) => projectVendor(asObj(row.contact ?? row)));
 }
 
+// Detail projection — superset of projectVendor with the ~20 extra fields that
+// only appear on /vendors/{id} (not /vendors/search). Parses the packed `code`
+// field into a `code_metadata` object using the pipe-delimited k=v convention
+// our FL import script uses (id=, t=, hr=, eh=, min=, tr=, r=, em=, pr=, p=).
+function parseCodeMetadata(code: unknown): Record<string, string> | null {
+  const s = code == null ? "" : String(code);
+  if (!s || !s.includes("=")) return null;
+  const out: Record<string, string> = {};
+  for (const part of s.split("|")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    out[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function projectVendorDetail(c: Row) {
+  const base = projectVendor(c);
+  const code = c.code ?? null;
+  return {
+    ...base,
+    // Detail-endpoint-only identity fields
+    code,
+    code_metadata: parseCodeMetadata(code),
+    first_name: c.firstName,
+    middle_name: c.middleName,
+    last_name: c.lastName,
+    suffix: c.suffix,
+    // Detail-only billing / payout
+    other_payout_type_id: c.otherPayoutTypeID,
+    ach_is_corporate_account: c.achIsCorporateAccount,
+    // Detail-only discount tiers
+    discount_amount: c.discountAmount,
+    discount_amount_min: c.discountAmountMin,
+    discount_amount_max: c.discountAmountMax,
+    // Detail-only flags
+    max_line_items_on_payment: c.maxLineItemsOnPayment,
+    prevent_consolidated_payments: c.preventConsolidatedPayments,
+    is_from_import: c.isFromImport,
+    import_source_key: c.importSourceKey,
+    website_url: c.websiteUrl,
+    applicant_id: c.applicantID,
+    owner_portal_name_override: c.ownerPortalNameOverride,
+    is_bill_approval_exempt: c.isBillApprovalExempt,
+    // QuickBooks linkage
+    is_quickbooks_export_enabled: c.isQuickbooksExportEnabled,
+    quickbooks_customer_name: c.quickbooksCustomerName,
+    // Contact type label (only on detail response)
+    contact_type: c.contactType,
+  };
+}
+
+export async function getVendor(vendorId: string) {
+  if (!vendorId) return { error: "vendor_id is required." };
+  const response = await client.fetchVendor(vendorId);
+  const contact = asObj((response as Row)?.contact ?? (response as Row));
+  if (!contact.contactID) {
+    return { error: `Vendor ${vendorId} not found.` };
+  }
+  return projectVendorDetail(contact);
+}
+
 // Haversine distance in miles between two lat/lon points.
 function haversineMiles(
   lat1: number,
