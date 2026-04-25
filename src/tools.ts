@@ -1,5 +1,4 @@
 import * as client from "./client.js";
-import zipcodes from "zipcodes";
 
 const LEASE_STATUS: Record<string, string> = {
   "1": "future",
@@ -526,6 +525,7 @@ export async function vendorsNear(input: VendorsNearInput) {
     };
   }
 
+  const { default: zipcodes } = await import("zipcodes");
   const rows = await client.fetchVendors();
   const vendors = rows.map((row) => asObj(row.contact ?? row));
 
