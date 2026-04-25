@@ -526,6 +526,7 @@ export async function vendorsNear(input: VendorsNearInput) {
     };
   }
 
+  const { default: zipcodes } = await import("zipcodes");
   const rows = await client.fetchVendors();
   const vendors = rows.map((row) => asObj(row.contact ?? row));
 
