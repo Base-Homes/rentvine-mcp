@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "rentvine-mcp",
   "display_name": "Rentvine",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Live access to your Rentvine property management data inside Claude.",
   "long_description": "Ask Claude about your Rentvine properties, leases, units, work orders, applications, inspections, and tenant balances. Data is read live from the Rentvine API using your own credentials.",
   "author": {
